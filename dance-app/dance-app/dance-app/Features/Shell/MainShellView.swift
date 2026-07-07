@@ -31,7 +31,9 @@ struct PracticeView: View {
             MarkerRail()
             VStack(spacing: 0) {
                 ZoomableVideoView(player: app.playback.player)
-                BeatWorkbenchView()
+                BeatControlsRow()
+                ScrubWheelView()
+                    .frame(height: 140)
                 TransportBar()
             }
             SpeedRail()
@@ -86,8 +88,8 @@ struct SpeedRail: View {
     }
 }
 
-/// Bottom transport: play/pause + seek slider. This strip is the stand-in
-/// for the M3 scrub wheel.
+/// Bottom transport: play/pause, time, and timeline toggles. Seeking lives
+/// in the scrub wheel above.
 struct TransportBar: View {
     @Environment(AppState.self) private var app
 
@@ -97,29 +99,47 @@ struct TransportBar: View {
                 app.playback.togglePlayPause()
             } label: {
                 Image(systemName: app.playback.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title)
+                    .font(.title2)
                     .frame(width: 44)
             }
 
-            Text(timeString(app.playback.currentTime))
+            Text("\(timeString(app.playback.currentTime)) / \(timeString(app.playback.duration))")
                 .monospacedDigit()
+                .font(.callout)
                 .foregroundStyle(.secondary)
 
-            Slider(
-                value: Binding(
-                    get: { app.playback.currentTime },
-                    set: { app.playback.seek(to: $0) }
-                ),
-                in: 0...max(app.playback.duration, 0.01)
-            )
+            Spacer()
 
-            Text(timeString(app.playback.duration))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+            toggle(
+                "waveform",
+                isOn: app.showWaveform,
+                hint: "Waveform"
+            ) { app.showWaveform.toggle() }
+
+            toggle(
+                app.scrubAudioEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill",
+                isOn: app.scrubAudioEnabled,
+                hint: "Scrub audio"
+            ) { app.scrubAudioEnabled.toggle() }
         }
         .padding(.horizontal, 20)
-        .frame(height: 96)
+        .frame(height: 56)
         .background(.ultraThinMaterial)
+    }
+
+    private func toggle(
+        _ systemImage: String,
+        isOn: Bool,
+        hint: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.body)
+                .foregroundStyle(isOn ? Color.accentColor : .secondary)
+                .frame(width: 36)
+        }
+        .accessibilityLabel(hint)
     }
 
     private func timeString(_ seconds: Double) -> String {

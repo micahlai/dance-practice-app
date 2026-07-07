@@ -5,9 +5,9 @@
 
 ## Status
 
-**Phase:** 1 — The beat
-**Current milestone:** M2 — Tempo & the "1" (core done; needs real-video
-validation). M1 leftovers: share-sheet extension, manual device test.
+**Phase:** 2 — The deck
+**Current milestone:** M3 — The scrub wheel (built; feel-tuning needs real
+hardware). M2 verified by user. M1 leftover: share-sheet extension.
 **Last updated:** 2026-07-06
 
 ## What exists
@@ -89,13 +89,47 @@ Checklist:
       talking intro, live performance, no-drums, tempo drift) → correct
       grid in < 30 s. Needs a human with real footage.
 
+## M3 status (The scrub wheel)
+
+New since M2:
+- `Features/Timeline/ScrubWheelView.swift` — `WheelView` (UIKit): pan to
+  scrub with exponential-decay inertia (τ≈0.5s), pinch to zoom the time
+  scale (1.5–40 s/screen), CADisplayLink rendering at 60–120fps via Core
+  Graphics. Draws waveform (toggleable), beat grid (numbered counts, "&"
+  half-ticks with labels when zoomed in past 12 s/screen, blue "1"),
+  shaded out-of-media regions, fixed center playhead. Replaced the M2
+  waveform strip and the transport slider.
+- `Features/Timeline/ScrubAudioEngine.swift` — DJ-scratch audio:
+  `AVAudioSourceNode` chases the finger position through pre-decoded mono
+  samples (signed rate, so backwards works — varispeed can't), linear
+  interpolation, rate capped at 3× natural, unfair-lock-guarded state.
+  Toggleable from the transport bar.
+- `PlaybackEngine` scrub API: `beginScrub` (remembers play state, pauses),
+  `scrub(to:)` (throttled AVPlayer seeks — one in flight, latest wins,
+  40 ms tolerance while scrubbing), `endScrub` (precise seek, resumes if
+  it was playing). Periodic time observer is gated off while scrubbing so
+  the wheel owns the playhead.
+- Transport bar slimmed: play/pause, time, waveform + scrub-audio toggles.
+
+Checklist:
+- [x] Inertial wheel driving the playhead
+- [x] Bidirectional sync (plays → wheel follows; touch takes over,
+      release resumes prior state; touch during coast keeps the session)
+- [x] Beat ticks with numbered counts + smaller "and" ticks
+- [x] Waveform overlay toggle
+- [x] Timeline pinch zoom
+- [x] Audible scrub via custom source-node graph
+- [ ] The real "done when": 120fps sustained on a ProMotion iPad, scratch
+      latency/feel, no drift after 10 min — needs real hardware + hands.
+      Simulator only confirms rendering and wiring.
+
 ## Next up
 
-1. Validate M2 against real dance videos (the 5-video acceptance test).
-2. M1 leftovers: share-sheet extension target (create in Xcode), manual
-   device test.
-3. Start M3: the scrub wheel (replace the transport slider + workbench
-   strip with the inertial wheel UI; the strip's drawing code seeds it).
+1. Hardware pass on the wheel: gesture feel, inertia constants (τ, snap
+   threshold), scratch chase window (60 ms), frame rate.
+2. Validate M2 tempo detection against real dance videos (5-video test).
+3. M1 leftover: share-sheet extension target (create in Xcode).
+4. Start M4: right-edge speed gesture + count-off.
 
 ## Open decisions
 

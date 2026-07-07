@@ -8,6 +8,11 @@ final class AppState {
     let playback = PlaybackEngine()
     let beats = BeatsModel()
 
+    // Timeline options
+    var showWaveform = true
+    var scrubAudioEnabled = true
+    @ObservationIgnored let scrubAudio = ScrubAudioEngine()
+
     func load(_ document: VideoDocument, restored: StoredPracticeState? = nil) {
         self.document = document
         playback.load(url: document.videoURL)
@@ -17,6 +22,37 @@ final class AppState {
         beats.detectionConfidence = restored?.detectionConfidence
         saveState()
         analyze(document)
+        loadScrubAudio(document)
+    }
+
+    // MARK: - Scrubbing (wheel → transport + scratch audio)
+
+    func beginScrub() {
+        playback.beginScrub()
+        if scrubAudioEnabled {
+            scrubAudio.begin(at: playback.currentTime)
+        }
+    }
+
+    func scrubMove(to time: Double) {
+        playback.scrub(to: time)
+        if scrubAudioEnabled {
+            scrubAudio.update(time: time)
+        }
+    }
+
+    func endScrub() {
+        scrubAudio.end()
+        playback.endScrub()
+    }
+
+    private func loadScrubAudio(_ document: VideoDocument) {
+        guard let audioURL = document.audioURL else { return }
+        let engine = scrubAudio
+        Task.detached(priority: .utility) {
+            guard let (samples, sampleRate) = try? AudioAnalyzer.readMonoSamples(from: audioURL) else { return }
+            engine.load(monoSamples: samples, sampleRate: sampleRate)
+        }
     }
 
     /// Reopen the most recently used video (with its saved grid) on launch.
@@ -28,6 +64,7 @@ final class AppState {
 
     func closeDocument() {
         playback.pause()
+        scrubAudio.unload()
         saveState()
         document = nil
         beats.reset()

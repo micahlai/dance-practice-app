@@ -227,7 +227,9 @@ enum AudioAnalyzer {
         }
     }
 
-    nonisolated private static func readMonoSamples(from url: URL) throws -> ([Float], Double) {
+    /// Decodes the whole file to mono float samples at its native rate.
+    /// Also used by ScrubAudioEngine to feed the scratch buffer.
+    nonisolated static func readMonoSamples(from url: URL) throws -> ([Float], Double) {
         let file = try AVAudioFile(forReading: url)
         let format = file.processingFormat
         let frameCount = AVAudioFrameCount(file.length)

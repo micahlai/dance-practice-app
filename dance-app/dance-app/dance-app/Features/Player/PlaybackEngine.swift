@@ -11,15 +11,20 @@ final class PlaybackEngine {
     private(set) var isPlaying = false
     private(set) var currentTime: Double = 0
     private(set) var duration: Double = 0
+    private(set) var isScrubbing = false
 
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
+    @ObservationIgnored private var wasPlayingBeforeScrub = false
+    @ObservationIgnored private var seekInFlight = false
+    @ObservationIgnored private var pendingScrubSeek: Double?
 
     init() {
         let interval = CMTime(value: 1, timescale: 30)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
-                self?.currentTime = time.seconds
+                guard let self, !self.isScrubbing else { return }
+                self.currentTime = time.seconds
             }
         }
     }
@@ -76,5 +81,55 @@ final class PlaybackEngine {
         currentTime = clamped
         let time = CMTime(seconds: clamped, preferredTimescale: 600)
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    // MARK: - Scrubbing
+
+    /// Wheel touch-down: remember transport state and take over the playhead.
+    func beginScrub() {
+        guard !isScrubbing else { return }
+        wasPlayingBeforeScrub = isPlaying
+        pause()
+        isScrubbing = true
+    }
+
+    /// Continuous playhead updates while dragging/coasting. Video seeks are
+    /// throttled (one in flight, latest wins) with loose tolerance for speed.
+    func scrub(to seconds: Double) {
+        guard isScrubbing else { return }
+        let clamped = max(0, duration > 0 ? min(seconds, duration) : seconds)
+        currentTime = clamped
+        if seekInFlight {
+            pendingScrubSeek = clamped
+        } else {
+            issueScrubSeek(clamped)
+        }
+    }
+
+    /// Wheel release (after inertia): precise final seek, restore transport.
+    func endScrub() {
+        guard isScrubbing else { return }
+        isScrubbing = false
+        pendingScrubSeek = nil
+        seek(to: currentTime)
+        if wasPlayingBeforeScrub {
+            play()
+        }
+    }
+
+    private func issueScrubSeek(_ seconds: Double) {
+        seekInFlight = true
+        let tolerance = CMTime(seconds: 0.04, preferredTimescale: 600)
+        let time = CMTime(seconds: seconds, preferredTimescale: 600)
+        player.seek(to: time, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.seekInFlight = false
+                if let pending = self.pendingScrubSeek, self.isScrubbing {
+                    self.pendingScrubSeek = nil
+                    self.issueScrubSeek(pending)
+                }
+            }
+        }
     }
 }
