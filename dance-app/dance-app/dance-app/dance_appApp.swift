@@ -1,17 +1,18 @@
-//
-//  dance_appApp.swift
-//  dance-app
-//
-//  Created by Micah Lai on 7/6/26.
-//
-
+import AVFAudio
 import SwiftUI
 
 @main
 struct dance_appApp: App {
+    @State private var appState = AppState()
+
+    init() {
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+    }
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainShellView()
+                .environment(appState)
         }
     }
 }
