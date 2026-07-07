@@ -5,9 +5,9 @@
 
 ## Status
 
-**Phase:** 0 — Foundation
-**Current milestone:** M1 — Video in, video plays (mostly done; share-sheet
-extension outstanding)
+**Phase:** 1 — The beat
+**Current milestone:** M2 — Tempo & the "1" (core done; needs real-video
+validation). M1 leftovers: share-sheet extension, manual device test.
 **Last updated:** 2026-07-06
 
 ## What exists
@@ -59,11 +59,43 @@ extension outstanding)
   everything is MainActor-isolated by default; analysis code that must run
   off-main (M2 waveform/tempo) needs explicit `@concurrent`/`nonisolated`.
 
+## M2 status (Tempo & the "1")
+
+New since M1:
+- `Core/AudioAnalysis/AudioAnalyzer.swift` — waveform peaks (vDSP, cached
+  as `<id>.waveform.json`) + tempo detection: spectral-flux onset envelope
+  (FFT via vDSP), detrended, autocorrelated over 60–200 BPM with harmonic
+  scoring + mild 120-BPM log-normal prior, parabolic lag refinement, and a
+  comb-filter beat-phase estimate for the suggested anchor.
+- `Features/Beats/` — `BeatGrid` (pure function of firstBeatTime + bpm;
+  1–8 counts, "&" half-counts, negative-time safe), `BeatsModel`,
+  `BeatWorkbenchView` (8s scrolling waveform strip with beat grid + labels
+  + center playhead, Canvas @30fps; controls row: BPM ±1/±0.1/½×/2×,
+  "Set 1" at playhead, ±10ms nudge, shift-by-beat).
+- `Core/Media/DocumentStore.swift` — sidecar `<id>.state.json` per video
+  (filenames, not absolute paths); most-recent session restored on launch.
+
+Checklist:
+- [x] Waveform peaks off-main + cached
+- [x] BPM detection with confidence, editable
+- [x] "Set the 1" UI with nudges
+- [x] Beat grid with 1–8 and "and" counts
+- [x] Grid/BPM/anchor persist per video (verified in sim container)
+- [x] Verified: offline harness — 4 synthetic click tracks (75/96/120/140
+      BPM) all detected within 0.3 BPM, conf 0.94–0.98, phase < 40 ms;
+      end-to-end in simulator via planted session (detected 120.1 · 98%,
+      grid rendered, sidecar + waveform cache written)
+- [ ] The real "done when": 5 real dance videos (studio choreo, TikTok w/
+      talking intro, live performance, no-drums, tempo drift) → correct
+      grid in < 30 s. Needs a human with real footage.
+
 ## Next up
 
-1. Verify M1 end-to-end in the simulator/device with a real video.
-2. Add the share-sheet extension target (in Xcode, not by hand).
-3. Start M2: waveform peak extraction (vDSP) off the extracted m4a.
+1. Validate M2 against real dance videos (the 5-video acceptance test).
+2. M1 leftovers: share-sheet extension target (create in Xcode), manual
+   device test.
+3. Start M3: the scrub wheel (replace the transport slider + workbench
+   strip with the inertial wheel UI; the strip's drawing code seeds it).
 
 ## Open decisions
 
@@ -71,13 +103,10 @@ extension outstanding)
       TikTok/YouTube handling? (ToS concerns — see CLAUDE.md.) Current
       build: file/Photos/direct URLs only, with an explanatory footnote in
       the import UI.
-- [ ] Tempo detection: fully custom vDSP pipeline vs. wrapping an existing
-      library (e.g. aubio). Decide during M2 spike.
-- [ ] Persistence: SwiftData vs. plain Codable JSON sidecar files per video.
-      Leaning sidecar files (simple, exportable) — confirm at M2.
-      Note: `VideoDocument` currently stores absolute URLs; switch to
-      library-relative filenames before persisting (absolute paths break
-      across app updates/reinstalls).
+- [x] Tempo detection: custom vDSP pipeline (no external deps) — built and
+      validated in M2. Revisit only if real-video accuracy disappoints.
+- [x] Persistence: Codable JSON sidecar files per video, storing filenames
+      (container-relative). SwiftData not needed.
 
 ## Known risks
 

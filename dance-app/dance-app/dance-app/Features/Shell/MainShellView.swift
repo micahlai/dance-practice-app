@@ -15,6 +15,9 @@ struct MainShellView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .task {
+            app.restoreLastSession()
+        }
     }
 }
 
@@ -28,6 +31,7 @@ struct PracticeView: View {
             MarkerRail()
             VStack(spacing: 0) {
                 ZoomableVideoView(player: app.playback.player)
+                BeatWorkbenchView()
                 TransportBar()
             }
             SpeedRail()
