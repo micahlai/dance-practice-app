@@ -37,6 +37,36 @@ struct SpeedRail: View {
     }
 }
 
+/// Floating reset-to-100% affordance at the video's bottom-right, just above
+/// the wheel. Shows the current rate; tapping restores full speed. Hidden at
+/// 100% (nothing to reset). Works mid-playback — `setRate` applies live.
+struct SpeedResetButton: View {
+    @Environment(AppState.self) private var app
+
+    var body: some View {
+        if app.playback.rate < 1 {
+            Button {
+                app.playback.setRate(1.0)
+                app.saveState()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.counterclockwise")
+                    Text("\(Int((app.playback.rate * 100).rounded()))%")
+                        .monospacedDigit()
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.black.opacity(0.55), in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
+            }
+            .padding([.trailing, .bottom], 16)
+            .accessibilityLabel("Reset speed to 100%")
+        }
+    }
+}
+
 /// Transparent gesture layer. UIKit so the drag keeps tracking after the
 /// finger leaves the rail (it will — the gesture moves inward across the
 /// video).

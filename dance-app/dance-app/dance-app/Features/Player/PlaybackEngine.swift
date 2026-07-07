@@ -81,7 +81,11 @@ final class PlaybackEngine {
     func setRate(_ newRate: Double) {
         rate = min(max(newRate, 0.25), 1.0)
         if isPlaying {
-            player.rate = Float(rate)
+            // `playImmediately(atRate:)`, not `player.rate = …`: with
+            // automaticallyWaitsToMinimizeStalling on (the default), a direct
+            // rate assignment can be deferred/ignored, so mid-playback speed
+            // changes wouldn't take effect. This applies the new rate live.
+            player.playImmediately(atRate: Float(rate))
         }
     }
 

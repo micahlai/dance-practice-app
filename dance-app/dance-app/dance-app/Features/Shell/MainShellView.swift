@@ -38,6 +38,10 @@ struct PracticeView: View {
                         SpeedGestureCatcher()
                             .frame(width: 44)
                     }
+                    // Reset-to-100% sits at the bottom-right, above the wheel.
+                    .overlay(alignment: .bottomTrailing) {
+                        SpeedResetButton()
+                    }
                 BeatControlsRow()
                 ScrubWheelView()
                     .frame(height: 140)

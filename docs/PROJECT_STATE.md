@@ -163,6 +163,14 @@ New since M3:
   metronome + count-in-music toggles, tappable % label resets to 100.
 - Sidecar gains `playbackRate` + `countOffEnabled` (optional fields —
   old files still decode).
+- Mid-playback speed changes apply **live**: `setRate` uses
+  `player.playImmediately(atRate:)` (not a direct `player.rate =`), which
+  `automaticallyWaitsToMinimizeStalling` (on by default) would otherwise
+  defer/ignore — this is why changing speed while playing appeared to do
+  nothing.
+- Reset-to-100%: in addition to the transport's tappable %, a floating
+  `SpeedResetButton` (`⟲ NN%` capsule) sits at the video's bottom-right,
+  just above the wheel; shown only when slowed, resets live.
 
 Checklist:
 - [x] Right-edge hold + drag inward, 5% snaps, haptic per snap
@@ -266,6 +274,11 @@ Checklist:
   armed A/B loop → restored correctly, rail chips/A-B tiles/green Loop
   toggle render, scroller draws the green loop band + orange marker chips.
   Loop-wrap timing at practice rates still wants a device.
+- Speed follow-ups: fixed mid-playback speed changes (now
+  `playImmediately(atRate:)` so they apply live) and added the bottom-right
+  `SpeedResetButton` above the wheel (rendered at a planted 50% — capsule
+  shows `⟲ 50%`; hidden at 100%). Sim can't drive the drag gesture (no
+  accessibility/tap tooling), so gesture feel still wants a device.
 
 ### 2026-07-06 (second session)
 - Xcode project created from template; restructured settings: iPad-only
