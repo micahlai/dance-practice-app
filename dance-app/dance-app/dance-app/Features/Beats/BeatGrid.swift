@@ -44,4 +44,11 @@ struct BeatGrid: Codable, Equatable, Sendable {
         let k = ((time - firstBeatTime) / beatInterval).rounded()
         return firstBeatTime + k * beatInterval
     }
+
+    /// The 1...8 count of the beat nearest to `time`.
+    func count(at time: Double) -> Int {
+        guard bpm > 0 else { return 1 }
+        let index = Int(((time - firstBeatTime) / beatInterval).rounded())
+        return ((index % 8) + 8) % 8 + 1
+    }
 }

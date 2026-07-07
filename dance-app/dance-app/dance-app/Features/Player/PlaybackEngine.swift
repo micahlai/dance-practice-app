@@ -12,6 +12,12 @@ final class PlaybackEngine {
     private(set) var currentTime: Double = 0
     private(set) var duration: Double = 0
     private(set) var isScrubbing = false
+    /// Practice speed, 0.25...1.0. Audio stays pitch-preserved (.timeDomain).
+    private(set) var rate: Double = 1.0
+
+    /// Fired on each periodic playhead update (not while scrubbing). Lets
+    /// AppState drive A/B looping without a second owner of "current time."
+    @ObservationIgnored var onTick: ((Double) -> Void)?
 
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
@@ -25,6 +31,7 @@ final class PlaybackEngine {
             MainActor.assumeIsolated {
                 guard let self, !self.isScrubbing else { return }
                 self.currentTime = time.seconds
+                self.onTick?(time.seconds)
             }
         }
     }
@@ -67,8 +74,15 @@ final class PlaybackEngine {
         if duration > 0, currentTime >= duration - 0.05 {
             seek(to: 0)
         }
-        player.play()
+        player.playImmediately(atRate: Float(rate))
         isPlaying = true
+    }
+
+    func setRate(_ newRate: Double) {
+        rate = min(max(newRate, 0.25), 1.0)
+        if isPlaying {
+            player.rate = Float(rate)
+        }
     }
 
     func pause() {

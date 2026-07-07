@@ -8,6 +8,13 @@ struct WheelRenderState {
     let waveform: WaveformData?
     let grid: BeatGrid?
     let showWaveform: Bool
+    /// Non-nil during a music count-in: the wheel holds centered here (red
+    /// playhead) while a yellow playhead shows `time` catching up.
+    let countInTarget: Double?
+    let markers: [Marker]
+    /// A/B loop bounds, and whether looping is currently armed.
+    let loop: ClosedRange<Double>?
+    let loopActive: Bool
 }
 
 /// The DJ-board timeline: pan to scrub (with inertia), pinch to zoom the
@@ -34,12 +41,17 @@ struct ScrubWheelView: UIViewRepresentable {
                 duration: app.playback.duration,
                 waveform: app.beats.waveform,
                 grid: app.beats.grid,
-                showWaveform: app.showWaveform
+                showWaveform: app.showWaveform,
+                countInTarget: app.countInTargetTime,
+                markers: app.markers.markers,
+                loop: app.markers.loopRange,
+                loopActive: app.markers.loopEnabled
             )
         }
         view.onScrubBegin = { app.beginScrub() }
         view.onScrubMove = { app.scrubMove(to: $0) }
         view.onScrubEnd = { app.endScrub() }
+        view.onLongPress = { app.addMarkerAtPlayhead() }
     }
 }
 
@@ -48,6 +60,9 @@ final class WheelView: UIView {
     var onScrubBegin: (() -> Void)?
     var onScrubMove: ((Double) -> Void)?
     var onScrubEnd: (() -> Void)?
+    /// Stationary press-and-hold: drop a marker at the playhead.
+    var onLongPress: (() -> Void)?
+    private let markerHaptics = UIImpactFeedbackGenerator(style: .medium)
 
     private enum Mode {
         case follow    // rendering the transport's playhead
@@ -74,6 +89,11 @@ final class WheelView: UIView {
         addGestureRecognizer(pan)
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch))
         addGestureRecognizer(pinch)
+        // A deliberate hold (no drag) drops a marker; a quick tap-drag still
+        // scrubs because the pan fires first once the finger moves.
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+        longPress.minimumPressDuration = 0.4
+        addGestureRecognizer(longPress)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -124,6 +144,12 @@ final class WheelView: UIView {
         default:
             break
         }
+    }
+
+    @objc private func handleLongPress(_ gr: UILongPressGestureRecognizer) {
+        guard gr.state == .began else { return }
+        markerHaptics.impactOccurred()
+        onLongPress?()
     }
 
     @objc private func handlePinch(_ pinch: UIPinchGestureRecognizer) {
@@ -177,7 +203,9 @@ final class WheelView: UIView {
         let height = bounds.height
         guard width > 0 else { return }
 
-        let time = mode == .follow ? state.time : scrubTime
+        // During a music count-in the wheel holds on the target; otherwise
+        // it follows the transport (or the finger).
+        let time = state.countInTarget ?? (mode == .follow ? state.time : scrubTime)
         let start = time - secondsPerScreen / 2
         func x(_ t: Double) -> CGFloat {
             CGFloat((t - start) / secondsPerScreen) * width
@@ -196,11 +224,36 @@ final class WheelView: UIView {
             context.fill(CGRect(x: dx, y: 0, width: width - dx, height: height))
         }
 
+        // A/B loop shading sits behind the waveform/grid.
+        if let loop = state.loop {
+            let ax = x(loop.lowerBound)
+            let bx = x(loop.upperBound)
+            context.setFillColor(UIColor.systemGreen.withAlphaComponent(state.loopActive ? 0.18 : 0.07).cgColor)
+            context.fill(CGRect(x: ax, y: 0, width: bx - ax, height: height))
+        }
+
         if state.showWaveform, let waveform = state.waveform {
             drawWaveform(waveform, context: context, x: x, width: width, height: height, start: start)
         }
         if let grid = state.grid {
             drawGrid(grid, context: context, x: x, height: height, start: start)
+        }
+        drawMarkers(state.markers, context: context, x: x, width: width, height: height, start: start)
+        if let loop = state.loop {
+            drawLoopBounds(loop, active: state.loopActive, context: context, x: x, height: height)
+        }
+
+        // Yellow catch-up playhead during a music count-in: actual playback
+        // position approaching the held red playhead.
+        if state.countInTarget != nil {
+            let px = x(state.time)
+            if px >= 0, px <= width {
+                context.setStrokeColor(UIColor.systemYellow.cgColor)
+                context.setLineWidth(2)
+                context.move(to: CGPoint(x: px, y: 0))
+                context.addLine(to: CGPoint(x: px, y: height))
+                context.strokePath()
+            }
         }
 
         // Playhead, fixed at center.
@@ -283,6 +336,71 @@ final class WheelView: UIView {
                     withAttributes: isOne ? oneAttributes : beatAttributes
                 )
             }
+        }
+    }
+
+    private func drawMarkers(
+        _ markers: [Marker],
+        context: CGContext,
+        x: (Double) -> CGFloat,
+        width: CGFloat,
+        height: CGFloat,
+        start: Double
+    ) {
+        let visible = start...(start + secondsPerScreen)
+        let orange = UIColor.systemOrange
+        let nameAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: UIColor.white,
+        ]
+        for marker in markers where visible.contains(marker.time) {
+            let px = x(marker.time)
+            context.setStrokeColor(orange.withAlphaComponent(0.9).cgColor)
+            context.setLineWidth(1.5)
+            context.move(to: CGPoint(x: px, y: 0))
+            context.addLine(to: CGPoint(x: px, y: height))
+            context.strokePath()
+
+            // Name chip at the bottom, clear of the beat-count labels up top.
+            let name = marker.name as NSString
+            let textSize = name.size(withAttributes: nameAttributes)
+            let pad: CGFloat = 3
+            let chip = CGRect(
+                x: min(px + 2, width - textSize.width - pad * 2 - 1),
+                y: height - textSize.height - 6,
+                width: textSize.width + pad * 2,
+                height: textSize.height + 2
+            )
+            context.setFillColor(orange.withAlphaComponent(0.92).cgColor)
+            context.addPath(UIBezierPath(roundedRect: chip, cornerRadius: 3).cgPath)
+            context.fillPath()
+            name.draw(at: CGPoint(x: chip.minX + pad, y: chip.minY + 1), withAttributes: nameAttributes)
+        }
+    }
+
+    private func drawLoopBounds(
+        _ loop: ClosedRange<Double>,
+        active: Bool,
+        context: CGContext,
+        x: (Double) -> CGFloat,
+        height: CGFloat
+    ) {
+        let color = UIColor.systemGreen.withAlphaComponent(active ? 0.95 : 0.5)
+        let labelAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .bold),
+            .foregroundColor: color,
+        ]
+        for (time, label) in [(loop.lowerBound, "A"), (loop.upperBound, "B")] {
+            let px = x(time)
+            context.setStrokeColor(color.cgColor)
+            context.setLineWidth(2)
+            context.move(to: CGPoint(x: px, y: 0))
+            context.addLine(to: CGPoint(x: px, y: height))
+            context.strokePath()
+            (label as NSString).draw(
+                at: CGPoint(x: px + 3, y: height * 0.5 - 8),
+                withAttributes: labelAttributes
+            )
         }
     }
 }

@@ -5,9 +5,12 @@
 
 ## Status
 
-**Phase:** 2 — The deck
-**Current milestone:** M3 — The scrub wheel (built; feel-tuning needs real
-hardware). M2 verified by user. M1 leftover: share-sheet extension.
+**Phase:** 3 — Practice tools
+**Current milestone:** M5 — Markers & A/B loops (built; wiring +
+persistence + rendering verified in sim, loop timing/feel need hardware).
+M4 built (haptics + gesture feel need hardware). M3 feel-tuned per user
+feedback (snap-don't-chase scratch, heavy wheel damping — see memory + code
+comments). M2 verified by user. M1 leftover: share-sheet extension.
 **Last updated:** 2026-07-06
 
 ## What exists
@@ -123,13 +126,109 @@ Checklist:
       latency/feel, no drift after 10 min — needs real hardware + hands.
       Simulator only confirms rendering and wiring.
 
+## M4 status (Speed control & count-off)
+
+New since M3:
+- `Features/SpeedControl/SpeedControlView.swift` — right-rail
+  `SpeedRail` (chevron + SPEED + live % readout) with a UIKit
+  long-press-then-drag catcher: hold 0.12 s engages, 24 pt of inward
+  travel per 5% step, snapped and haptic-ticked (UIImpactFeedbackGenerator
+  — silent in sim), clamped 25–100%. Rate holds after release and
+  persists in the sidecar.
+- `Features/SpeedControl/CountOffPlayer.swift` — "5, 6, 7, 8" ticks as
+  sine clicks padded to exactly one beat interval each, queued
+  back-to-back on an AVAudioPlayerNode for sample-accurate spacing at any
+  practice rate; first tick accented (1.5 kHz vs 1 kHz).
+- `AppState.togglePlayPause()` — with count-off enabled + a grid: snaps
+  the playhead to the nearest beat and counts *into its 8-count position*:
+  the run ends one count before the playhead's count, starts on 5 or 1
+  (shortest run ≥ 3 counts), e.g. playhead on 1 → "5 6 7 8", on 2 →
+  "5 6 7 8 1", on 8 → "5 6 7", on 6 → "1 2 3 4 5". Ticks accent 1 and 5;
+  spacing is beatInterval/rate with absolute-deadline scheduling
+  (ContinuousClock) so playback lands on the beat. Tapping during the
+  count cancels it. Sequence logic verified for all 8 targets offline.
+- `PlaybackEngine.setRate` — 0.25–1.0, applied live while playing
+  (`playImmediately(atRate:)` on play), pitch preserved via `.timeDomain`.
+- Music count-in option (music-note toggle next to the metronome, only
+  active when count-off is on): playback starts N counts before the
+  playhead and plays through the countdown. The wheel holds centered on
+  the target (red playhead) while a yellow playhead shows actual playback
+  catching up; when they meet, the wheel resumes following. Falls back to
+  ticks-only when there isn't enough media before the playhead.
+- Speed gesture grabs anywhere along the right edge (rail + a 44 pt strip
+  over the video's right edge, full height). % HUD rides just left of the
+  finger. Fine mode: finger near the rail → vertical drag = 1% steps;
+  slid inward past 12 pt → coarse 5% snaps.
+- Video overlays: big count-off numeral; finger-tracking % HUD. Transport:
+  metronome + count-in-music toggles, tappable % label resets to 100.
+- Sidecar gains `playbackRate` + `countOffEnabled` (optional fields —
+  old files still decode).
+
+Checklist:
+- [x] Right-edge hold + drag inward, 5% snaps, haptic per snap
+- [x] On-screen rate indicator while active; rate persists
+- [x] Pitch-preserved audio at all rates
+- [x] Count-off "5,6,7,8", one beat per count at current rate, aligned
+      to the grid (playhead snaps to nearest beat first)
+- [ ] The real "done when": one-handed mid-playback speed change without
+      looking away, count-off lands exactly on the "1" — needs hardware
+      (haptics don't fire in sim; count-off visual/audio sync within
+      ~10 ms assumed from Task.sleep, verify on device).
+
+## M5 status (Markers & A/B loops)
+
+New since M4:
+- `Features/Markers/Marker.swift` — `Marker` (id/time/name, Codable) +
+  `MarkersModel` (@Observable): user-ordered `markers`, `loopA`/`loopB`,
+  `loopEnabled`, `loopRange` (valid only when B > A). Owned by `AppState`.
+- `Features/Markers/MarkerRailView.swift` — the real left rail (replaces the
+  M1 placeholder that lived in `MainShellView`): eject, a scrolling list of
+  marker snap chips (name + m:ss; tap = seek to marker), an orange "Mark"
+  button, and the A/B loop block (A/B set tiles showing their times, a Loop
+  toggle that lights green when armed, Clear loop). Rename via an alert;
+  reorder (Move Up/Down) and delete via each chip's context menu. Rail
+  widened 72 → 112 pt.
+- `AppState` markers/loops API: `addMarkerAtPlayhead` (default name = lowest
+  unused integer), `snapToMarker`, `renameMarker`, `deleteMarker`,
+  `moveMarker(by:)`, `setLoopA`/`setLoopB` (auto-normalized so A precedes
+  B), `toggleLoop`, `clearLoop`. Loop playback: `PlaybackEngine.onTick`
+  (fired from the periodic time observer, gated off while scrubbing) drives
+  `handlePlayheadTick` → wraps at B (30 ms guard band) back to A. With
+  count-off on, each loop pass runs the count-off into A (reuses
+  `startCountOff`, so the music-count-in variant works too); otherwise it's
+  a plain seek that keeps playing.
+- Scroller (`ScrubWheelView`): renders the A/B loop as a translucent green
+  region (brighter when armed) with green A/B boundary lines + labels, and
+  markers as orange full-height lines with a name chip at the bottom (clear
+  of the top beat-count labels). Wheel long-press (0.4 s, stationary) drops
+  a marker at the playhead with a haptic. `WheelRenderState` gained
+  `markers`/`loop`/`loopActive`.
+- Sidecar gains `markers`, `loopA`, `loopB`, `loopEnabled` (all optional —
+  pre-M5 files still decode).
+
+Checklist:
+- [x] Set a marker at the playhead (rail "Mark" button + wheel long-press)
+- [x] Left rail marker buttons; tap snaps the playhead to the marker
+- [x] Markers rename / reorder / delete; rendered on the scroller
+- [x] A/B loop: set A, set B, loop toggle; loop respects the count-off
+      option (counts back in each pass when count-off is on)
+- [x] All of it persists per video
+- [x] Verified: builds; end-to-end in the sim via planted session — markers
+      + active A/B loop restored, rail chips/tiles/toggle render, scroller
+      draws the green loop region + orange marker chips
+- [ ] The real "done when": full practice loop on hardware — mark verse →
+      snap → set A/B around the hard part → loop at 60% with count-off,
+      loop wrap landing cleanly on the beat (timing needs a device, like
+      M4 count-off).
+
 ## Next up
 
-1. Hardware pass on the wheel: gesture feel, inertia constants (τ, snap
-   threshold), scratch chase window (60 ms), frame rate.
+1. Hardware pass: wheel feel (τ=0.18, dead-stop thresholds), speed
+   gesture (24 pt/step), count-off timing, haptics, frame rate, and M5
+   loop-wrap timing (does the wrap land on the beat at 60%?).
 2. Validate M2 tempo detection against real dance videos (5-video test).
 3. M1 leftover: share-sheet extension target (create in Xcode).
-4. Start M4: right-edge speed gesture + count-off.
+4. Start M6: Bluetooth latency calibration & ship prep.
 
 ## Open decisions
 
@@ -155,6 +254,18 @@ Checklist:
   that single owner today — keep it that way.
 
 ## Session log
+
+### 2026-07-06 (third session)
+- Built M5 (markers & A/B loops), moving into Phase 3. New
+  `Features/Markers/` (Marker + MarkersModel, MarkerRailView); markers/loops
+  API + loop playback (`PlaybackEngine.onTick` → `handlePlayheadTick`) in
+  AppState; scroller renders loop region + markers; wheel long-press drops a
+  marker; sidecar extended (optional fields). Left rail is now real
+  (replaced the M1 placeholder), widened to 112 pt.
+- Verified in sim: builds clean; planted a session with two markers and an
+  armed A/B loop → restored correctly, rail chips/A-B tiles/green Loop
+  toggle render, scroller draws the green loop band + orange marker chips.
+  Loop-wrap timing at practice rates still wants a device.
 
 ### 2026-07-06 (second session)
 - Xcode project created from template; restructured settings: iPad-only

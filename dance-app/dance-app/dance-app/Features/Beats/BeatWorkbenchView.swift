@@ -4,14 +4,37 @@ import SwiftUI
 /// the waveform and beat grid.
 struct BeatControlsRow: View {
     @Environment(AppState.self) private var app
+    @State private var bpmText = ""
+    @State private var isEditingBPM = false
 
     var body: some View {
         HStack(spacing: 10) {
             if let grid = app.beats.grid {
-                Text(String(format: "%.1f BPM", grid.bpm))
-                    .font(.callout.weight(.semibold))
-                    .monospacedDigit()
-                    .frame(width: 92, alignment: .leading)
+                // Tap to type an exact BPM.
+                Button {
+                    bpmText = String(format: "%.1f", grid.bpm)
+                    isEditingBPM = true
+                } label: {
+                    Text(String(format: "%.1f BPM", grid.bpm))
+                        .font(.callout.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 92, alignment: .leading)
+                .popover(isPresented: $isEditingBPM) {
+                    HStack(spacing: 10) {
+                        TextField("BPM", text: $bpmText)
+                            .keyboardType(.decimalPad)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 90)
+                            .onSubmit(commitTypedBPM)
+                        Button("Set", action: commitTypedBPM)
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                    }
+                    .padding(12)
+                    .presentationCompactAdaptation(.popover)
+                }
 
                 adjust("−1") { $0.bpm -= 1 }
                 adjust("−.1") { $0.bpm -= 0.1 }
@@ -37,11 +60,20 @@ struct BeatControlsRow: View {
 
                 Spacer()
 
+                // Tap to snap the grid back to the detected tempo.
                 if let detected = app.beats.detectedBPM,
                    let confidence = app.beats.detectionConfidence {
-                    Text(String(format: "detected %.1f · %.0f%%", detected, confidence * 100))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Button {
+                        app.updateGrid { $0.bpm = detected }
+                    } label: {
+                        Text(String(format: "detected %.1f · %.0f%%", detected, confidence * 100))
+                            .font(.caption)
+                            .foregroundStyle(
+                                abs(grid.bpm - detected) < 0.05 ? Color.secondary : Color.accentColor
+                            )
+                    }
+                    .disabled(abs(grid.bpm - detected) < 0.05)
+                    .accessibilityLabel("Use detected BPM")
                 }
             } else if app.beats.isAnalyzing {
                 Text("Detecting tempo…")
@@ -61,6 +93,13 @@ struct BeatControlsRow: View {
         .padding(.horizontal, 12)
         .frame(height: 44)
         .background(.black.opacity(0.4))
+    }
+
+    private func commitTypedBPM() {
+        if let value = Double(bpmText.replacingOccurrences(of: ",", with: ".")), value > 0 {
+            app.updateGrid { $0.bpm = value }
+        }
+        isEditingBPM = false
     }
 
     private func adjust(_ label: String, _ transform: @escaping (inout BeatGrid) -> Void) -> some View {

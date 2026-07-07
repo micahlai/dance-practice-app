@@ -22,7 +22,7 @@ struct MainShellView: View {
 }
 
 /// The main practice layout: marker rail left, video center, speed zone
-/// right, transport strip bottom. Rails are M5/M4 placeholders.
+/// right, transport strip bottom.
 struct PracticeView: View {
     @Environment(AppState.self) private var app
 
@@ -31,6 +31,13 @@ struct PracticeView: View {
             MarkerRail()
             VStack(spacing: 0) {
                 ZoomableVideoView(player: app.playback.player)
+                    .overlay { VideoOverlays() }
+                    // Widen the speed-gesture grab zone: the whole right
+                    // edge of the video, not just the 56 pt rail.
+                    .overlay(alignment: .trailing) {
+                        SpeedGestureCatcher()
+                            .frame(width: 44)
+                    }
                 BeatControlsRow()
                 ScrubWheelView()
                     .frame(height: 140)
@@ -41,50 +48,42 @@ struct PracticeView: View {
     }
 }
 
-/// Left rail: eject button now; marker snap buttons arrive in M5.
-struct MarkerRail: View {
+/// Transient HUDs over the video: count-off numbers and the speed readout
+/// while the right-edge gesture is active.
+struct VideoOverlays: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
-        VStack(spacing: 16) {
-            Button {
-                app.closeDocument()
-            } label: {
-                Image(systemName: "eject.fill")
-                    .font(.title3)
+        ZStack {
+            if let label = app.countOffLabel {
+                Text(label)
+                    .font(.system(size: 140, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.6), radius: 12)
+                    .transition(.scale.combined(with: .opacity))
+                    .id(label)
+            } else if app.speedGestureActive {
+                // Rides just left of the finger.
+                GeometryReader { geo in
+                    let frame = geo.frame(in: .global)
+                    let point = app.speedGesturePoint ?? CGPoint(x: frame.maxX, y: frame.midY)
+                    let local = CGPoint(x: point.x - frame.minX, y: point.y - frame.minY)
+                    Text("\(Int((app.playback.rate * 100).rounded()))%")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
+                        .position(
+                            x: min(max(local.x - 52, 40), geo.size.width - 40),
+                            y: min(max(local.y, 22), geo.size.height - 22)
+                        )
+                }
             }
-            .padding(.top, 12)
-
-            Spacer()
-
-            ForEach(0..<4) { _ in
-                Circle()
-                    .strokeBorder(.white.opacity(0.15), lineWidth: 1.5)
-                    .frame(width: 36, height: 36)
-            }
-
-            Spacer()
         }
-        .frame(width: 72)
-        .background(.black.opacity(0.6))
-    }
-}
-
-/// Right rail: reserved zone for the M4 hold-and-drag speed gesture.
-struct SpeedRail: View {
-    var body: some View {
-        VStack {
-            Spacer()
-            Text("SPEED")
-                .font(.caption2.weight(.semibold))
-                .kerning(2)
-                .foregroundStyle(.white.opacity(0.25))
-                .rotationEffect(.degrees(90))
-                .fixedSize()
-            Spacer()
-        }
-        .frame(width: 56)
-        .background(.black.opacity(0.6))
+        .animation(.easeOut(duration: 0.12), value: app.countOffLabel)
+        .allowsHitTesting(false)
     }
 }
 
@@ -96,7 +95,7 @@ struct TransportBar: View {
     var body: some View {
         HStack(spacing: 16) {
             Button {
-                app.playback.togglePlayPause()
+                app.togglePlayPause()
             } label: {
                 Image(systemName: app.playback.isPlaying ? "pause.fill" : "play.fill")
                     .font(.title2)
@@ -108,7 +107,34 @@ struct TransportBar: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
+            if app.playback.rate < 1 {
+                Button {
+                    app.playback.setRate(1.0)
+                    app.saveState()
+                } label: {
+                    Text("\(Int((app.playback.rate * 100).rounded()))%")
+                        .font(.callout.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.accentColor)
+                }
+                .accessibilityLabel("Reset speed to 100%")
+            }
+
             Spacer()
+
+            toggle(
+                "metronome",
+                isOn: app.countOffEnabled,
+                hint: "Count-off"
+            ) { app.countOffEnabled.toggle(); app.saveState() }
+
+            toggle(
+                "music.note",
+                isOn: app.countOffEnabled && app.countInMusicEnabled,
+                hint: "Play music during count-off"
+            ) { app.countInMusicEnabled.toggle(); app.saveState() }
+                .disabled(!app.countOffEnabled)
+                .opacity(app.countOffEnabled ? 1 : 0.4)
 
             toggle(
                 "waveform",

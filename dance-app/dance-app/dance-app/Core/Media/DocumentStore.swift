@@ -11,6 +11,14 @@ struct StoredPracticeState: Codable {
     var grid: BeatGrid?
     var detectedBPM: Double?
     var detectionConfidence: Double?
+    var playbackRate: Double?
+    var countOffEnabled: Bool?
+    var countInMusicEnabled: Bool?
+    // M5 — markers & A/B loop (optional so pre-M5 sidecars still decode).
+    var markers: [Marker]? = nil
+    var loopA: Double? = nil
+    var loopB: Double? = nil
+    var loopEnabled: Bool? = nil
     var lastOpened: Date
 }
 
