@@ -21,8 +21,10 @@ struct MainShellView: View {
     }
 }
 
-/// The main practice layout: marker rail left, video center, speed zone
-/// right, transport strip bottom.
+/// The main practice layout. Adapts to orientation / aspect ratio: in
+/// landscape both side rails flank the video; in portrait the video takes
+/// the width and the speed rail collapses (the speed gesture stays live on
+/// the video's right edge).
 struct PracticeView: View {
     @Environment(AppState.self) private var app
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
@@ -30,27 +32,17 @@ struct PracticeView: View {
 
     var body: some View {
         @Bindable var app = app
-        HStack(spacing: 0) {
-            MarkerRail()
-            VStack(spacing: 0) {
-                ZoomableVideoView(player: app.playback.player)
-                    .overlay { VideoOverlays() }
-                    // Widen the speed-gesture grab zone: the whole right
-                    // edge of the video, not just the 56 pt rail.
-                    .overlay(alignment: .trailing) {
-                        SpeedGestureCatcher()
-                            .frame(width: 44)
-                    }
-                    // Reset-to-100% sits at the bottom-right, above the wheel.
-                    .overlay(alignment: .bottomTrailing) {
-                        SpeedResetButton()
-                    }
-                BeatControlsRow()
-                ScrubWheelView()
-                    .frame(height: 140)
-                TransportBar()
+        GeometryReader { geo in
+            let portrait = geo.size.height > geo.size.width
+            HStack(spacing: 0) {
+                MarkerRail()
+                centerColumn
+                // Wide layouts get the dedicated speed rail; portrait relies
+                // on the video-edge gesture zone to reclaim the width.
+                if !portrait {
+                    SpeedRail()
+                }
             }
-            SpeedRail()
         }
         .overlay {
             if showOnboarding {
@@ -73,6 +65,30 @@ struct PracticeView: View {
         }
         .task {
             if !hasSeenOnboarding { showOnboarding = true }
+        }
+    }
+
+    /// Video + controls, shared by both layouts. The video area flexes to
+    /// fill; the wheel/transport keep fixed heights.
+    private var centerColumn: some View {
+        VStack(spacing: 0) {
+            ZoomableVideoView(player: app.playback.player)
+                .overlay { VideoOverlays() }
+                // The whole right edge of the video is the speed-gesture grab
+                // zone (widened from the 56 pt rail) — and the only one in
+                // portrait, where the rail is gone.
+                .overlay(alignment: .trailing) {
+                    SpeedGestureCatcher()
+                        .frame(width: 44)
+                }
+                // Reset-to-100% sits at the bottom-right, above the wheel.
+                .overlay(alignment: .bottomTrailing) {
+                    SpeedResetButton()
+                }
+            BeatControlsRow()
+            ScrubWheelView()
+                .frame(height: 140)
+            TransportBar()
         }
     }
 }

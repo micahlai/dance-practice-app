@@ -8,8 +8,21 @@ struct BeatControlsRow: View {
     @State private var isEditingBPM = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            if let grid = app.beats.grid {
+        // Horizontally scrollable so the full control set stays reachable at
+        // any width (narrow portrait / split view), never clipped.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                content
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+        }
+        .frame(height: 44)
+        .background(.black.opacity(0.4))
+    }
+
+    @ViewBuilder private var content: some View {
+        if let grid = app.beats.grid {
                 // Tap to type an exact BPM.
                 Button {
                     bpmText = String(format: "%.1f", grid.bpm)
@@ -58,7 +71,7 @@ struct BeatControlsRow: View {
                 adjust("◀ beat") { $0.firstBeatTime -= $0.beatInterval }
                 adjust("beat ▶") { $0.firstBeatTime += $0.beatInterval }
 
-                Spacer()
+                Divider().frame(height: 20)
 
                 // Tap to snap the grid back to the detected tempo.
                 if let detected = app.beats.detectedBPM,
@@ -79,7 +92,6 @@ struct BeatControlsRow: View {
                 Text("Detecting tempo…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Spacer()
             } else {
                 Button("Start grid at 120 BPM") {
                     app.updateGrid { _ in }
@@ -87,12 +99,7 @@ struct BeatControlsRow: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .font(.caption)
-                Spacer()
             }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 44)
-        .background(.black.opacity(0.4))
     }
 
     private func commitTypedBPM() {

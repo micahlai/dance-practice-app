@@ -19,7 +19,8 @@ user. M1 leftover: share-sheet extension.
 
 - Xcode project at `dance-app/dance-app/dance-app.xcodeproj` (note the
   nested path; scheme `dance-app`, bundle id `micahlai.dance-app`).
-  iPad-only, landscape-only, deployment target **iPadOS 17.0** (decided —
+  iPad-only, **all orientations** (adaptive layout — see log; was
+  landscape-only through M6), deployment target **iPadOS 17.0** (decided —
   see log), filesystem-synced groups so new files are picked up
   automatically.
 - Source under `dance-app/dance-app/dance-app/`:
@@ -322,6 +323,21 @@ share-sheet extension, and the actual TestFlight/App Store submission.
   that single owner today — keep it that way.
 
 ## Session log
+
+### 2026-07-06 (fifth session)
+- Responsive layout: unlocked orientation (Info.plist iPad orientations now
+  all four, both build configs) and made `PracticeView` adapt via a
+  `GeometryReader`. Landscape keeps the three-column layout
+  (marker rail | video+controls | speed rail); portrait (height > width)
+  drops the speed rail so the video takes the width — the speed gesture
+  stays live on the video's right edge. `BeatControlsRow` is now a
+  horizontal `ScrollView` (detected-BPM badge inline) so it never clips at
+  narrow widths / split view.
+- Verified in sim by rotating the device (osascript → Simulator): portrait
+  renders cleanly (marker rail + full-width video, all controls reachable,
+  no speed rail); landscape unchanged (speed rail present). Automation note:
+  osascript key events to the Simulator work in this environment for
+  rotate (Cmd+←/→); mouse-click automation still needs coordinates.
 
 ### 2026-07-06 (fourth session)
 - Speed follow-ups on M4: fixed mid-playback speed changes (setRate now uses
