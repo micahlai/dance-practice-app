@@ -28,7 +28,16 @@ struct MainShellView: View {
 struct PracticeView: View {
     @Environment(AppState.self) private var app
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @AppStorage("wheelHeight") private var wheelHeight = 140.0
+    @AppStorage("wheelCollapsed") private var wheelCollapsed = false
     @State private var showOnboarding = false
+
+    private let wheelRange: ClosedRange<Double> = 64...340
+    private let collapsedWheelHeight = 40.0
+
+    private var effectiveWheelHeight: Double {
+        wheelCollapsed ? collapsedWheelHeight : min(max(wheelHeight, wheelRange.lowerBound), wheelRange.upperBound)
+    }
 
     var body: some View {
         @Bindable var app = app
@@ -86,8 +95,14 @@ struct PracticeView: View {
                     SpeedResetButton()
                 }
             BeatControlsRow()
+            WheelHandle(
+                height: $wheelHeight,
+                collapsed: $wheelCollapsed,
+                range: wheelRange,
+                collapsedHeight: collapsedWheelHeight
+            )
             ScrubWheelView()
-                .frame(height: 140)
+                .frame(height: effectiveWheelHeight)
             TransportBar()
         }
     }

@@ -37,9 +37,14 @@ final class AppState {
         }
     }
 
-    // Timeline options
-    var showWaveform = true
-    var scrubAudioEnabled = true
+    // Timeline options (persisted so the preferences stick across launches).
+    var showWaveform = UserDefaults.standard.object(forKey: "showWaveform") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showWaveform, forKey: "showWaveform") }
+    }
+    /// Audible DJ-scratch while scrubbing. Off = silent scrubbing.
+    var scrubAudioEnabled = UserDefaults.standard.object(forKey: "scrubAudioEnabled") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(scrubAudioEnabled, forKey: "scrubAudioEnabled") }
+    }
     @ObservationIgnored let scrubAudio = ScrubAudioEngine()
 
     // Speed control & count-off

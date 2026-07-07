@@ -338,6 +338,17 @@ share-sheet extension, and the actual TestFlight/App Store submission.
   no speed rail); landscape unchanged (speed rail present). Automation note:
   osascript key events to the Simulator work in this environment for
   rotate (Cmd+←/→); mouse-click automation still needs coordinates.
+- Wheel/waveform sizing: new `Features/Timeline/WheelHandle.swift` — a slim
+  grabber bar above the scrub wheel; drag it up/down to resize the wheel
+  (64–340 pt) or tap the chevron to collapse to a compact 40 pt strip. Size
+  + collapsed state persist via `@AppStorage` (`wheelHeight`,
+  `wheelCollapsed`). Verified default / collapsed / tall renders in sim.
+- Scrub-sound off: the transport's speaker toggle already muted scrub audio;
+  now `scrubAudioEnabled` (and `showWaveform`) persist across launches
+  (UserDefaults-backed), so "off" sticks. Note for testing: the simulator's
+  cfprefsd caches `@AppStorage`/UserDefaults, so a host-side `defaults
+  write` + immediate relaunch is unreliable — use launch-arg overrides to
+  screenshot persisted-pref states.
 
 ### 2026-07-06 (fourth session)
 - Speed follow-ups on M4: fixed mid-playback speed changes (setRate now uses
