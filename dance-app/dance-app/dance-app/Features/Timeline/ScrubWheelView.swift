@@ -15,6 +15,9 @@ struct WheelRenderState {
     /// A/B loop bounds, and whether looping is currently armed.
     let loop: ClosedRange<Double>?
     let loopActive: Bool
+    /// Latency compensation (seconds): beat ticks draw shifted by this so
+    /// they cross the playhead when the (delayed) audio is actually heard.
+    let beatVisualOffset: Double
 }
 
 /// The DJ-board timeline: pan to scrub (with inertia), pinch to zoom the
@@ -45,7 +48,8 @@ struct ScrubWheelView: UIViewRepresentable {
                 countInTarget: app.countInTargetTime,
                 markers: app.markers.markers,
                 loop: app.markers.loopRange,
-                loopActive: app.markers.loopEnabled
+                loopActive: app.markers.loopEnabled,
+                beatVisualOffset: app.latencyOffset
             )
         }
         view.onScrubBegin = { app.beginScrub() }
@@ -236,7 +240,7 @@ final class WheelView: UIView {
             drawWaveform(waveform, context: context, x: x, width: width, height: height, start: start)
         }
         if let grid = state.grid {
-            drawGrid(grid, context: context, x: x, height: height, start: start)
+            drawGrid(grid, context: context, x: x, height: height, start: start, offset: state.beatVisualOffset)
         }
         drawMarkers(state.markers, context: context, x: x, width: width, height: height, start: start)
         if let loop = state.loop {
@@ -294,8 +298,12 @@ final class WheelView: UIView {
         context: CGContext,
         x: (Double) -> CGFloat,
         height: CGFloat,
-        start: Double
+        start: Double,
+        offset: Double
     ) {
+        // Latency compensation shifts where ticks are drawn; the underlying
+        // grid times (media timeline) are untouched. Query a window shifted
+        // by -offset and draw each tick at +offset.
         let showAndLabels = secondsPerScreen < 12
         let accent = tintColor ?? .systemBlue
         let beatAttributes: [NSAttributedString.Key: Any] = [
@@ -311,8 +319,8 @@ final class WheelView: UIView {
             .foregroundColor: UIColor(white: 1, alpha: 0.45),
         ]
 
-        for tick in grid.ticks(in: start...(start + secondsPerScreen)) {
-            let px = x(tick.time)
+        for tick in grid.ticks(in: (start - offset)...(start - offset + secondsPerScreen)) {
+            let px = x(tick.time + offset)
             if tick.isAnd {
                 context.setStrokeColor(UIColor(white: 1, alpha: 0.25).cgColor)
                 context.setLineWidth(1)

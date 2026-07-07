@@ -25,8 +25,11 @@ struct MainShellView: View {
 /// right, transport strip bottom.
 struct PracticeView: View {
     @Environment(AppState.self) private var app
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @State private var showOnboarding = false
 
     var body: some View {
+        @Bindable var app = app
         HStack(spacing: 0) {
             MarkerRail()
             VStack(spacing: 0) {
@@ -48,6 +51,28 @@ struct PracticeView: View {
                 TransportBar()
             }
             SpeedRail()
+        }
+        .overlay {
+            if showOnboarding {
+                OnboardingOverlay {
+                    hasSeenOnboarding = true
+                    withAnimation { showOnboarding = false }
+                }
+            }
+        }
+        .sheet(isPresented: $app.showCalibrationSheet) {
+            CalibrationView()
+                .environment(app)
+                .presentationDetents([.medium, .large])
+        }
+        .alert("New audio output", isPresented: $app.showCalibrationPrompt) {
+            Button("Calibrate") { app.showCalibrationSheet = true }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("Beat markers may drift over \(app.calibrationRouteName). Calibrate so they feel on beat.")
+        }
+        .task {
+            if !hasSeenOnboarding { showOnboarding = true }
         }
     }
 }
@@ -139,6 +164,16 @@ struct TransportBar: View {
             ) { app.countInMusicEnabled.toggle(); app.saveState() }
                 .disabled(!app.countOffEnabled)
                 .opacity(app.countOffEnabled ? 1 : 0.4)
+
+            Button {
+                app.showCalibrationSheet = true
+            } label: {
+                Image(systemName: "headphones")
+                    .font(.body)
+                    .foregroundStyle(app.latencyOffset != 0 ? Color.accentColor : .secondary)
+                    .frame(width: 36)
+            }
+            .accessibilityLabel("Calibrate beat latency")
 
             toggle(
                 "waveform",

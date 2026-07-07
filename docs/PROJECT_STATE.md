@@ -5,12 +5,14 @@
 
 ## Status
 
-**Phase:** 3 — Practice tools
-**Current milestone:** M5 — Markers & A/B loops (built; wiring +
-persistence + rendering verified in sim, loop timing/feel need hardware).
-M4 built (haptics + gesture feel need hardware). M3 feel-tuned per user
-feedback (snap-don't-chase scratch, heavy wheel damping — see memory + code
-comments). M2 verified by user. M1 leftover: share-sheet extension.
+**Phase:** 4 — Polish & ship
+**Current milestone:** M6 — Latency calibration & ship (calibration flow +
+per-route offset + beat-visual compensation + route auto-prompt + gesture
+onboarding + privacy manifest all built & verified in sim; the ship items —
+10-min 4K perf pass, TestFlight/App Store metadata — need a device + App
+Store Connect). M5 (markers/loops) built, sim-verified. M4 built (haptics +
+gesture feel need hardware). M3 feel-tuned per user feedback. M2 verified by
+user. M1 leftover: share-sheet extension.
 **Last updated:** 2026-07-06
 
 ## What exists
@@ -229,14 +231,72 @@ Checklist:
       loop wrap landing cleanly on the beat (timing needs a device, like
       M4 count-off).
 
+## M6 status (Latency calibration & ship)
+
+New since M5:
+- `Core/Sync/LatencyStore.swift` — per-output-route signed offset (seconds)
+  in UserDefaults, keyed by `portType|uid`; route name + wireless
+  (BT/AirPlay) detection via `AVAudioSession.currentRoute`.
+- `Features/Calibration/` — `LatencyCalibrator` (@Observable): a 100-BPM
+  metronome (`ClickPlayer`, an `AVAudioPlayerNode` firing a sine click per
+  beat off a CADisplayLink) while the user taps; offset = **median signed
+  tap error** vs the nearest scheduled beat (folds route latency + the
+  dancer's own bias into one "feels on beat" number). `CalibrationView` —
+  sheet with a tap pad (registers on touch-down), live Taps/Offset readout,
+  Start/Restart/Save (Save gated at ≥6 taps).
+- `AppState` latency wiring: `latencyOffset` for the current route, an
+  `AVAudioSession.routeChangeNotification` observer that reloads the offset
+  and, on an **uncalibrated wireless route**, sets `showCalibrationPrompt`.
+  `applyCalibration(offset:)` persists + applies live. Transport gained a
+  `headphones` button (accent when the route is calibrated) to open the
+  sheet; MainShellView presents the sheet + the "New audio output" alert.
+- Beat-visual compensation: `ScrubWheelView` shifts only the **beat grid**
+  drawing by `latencyOffset` (query window −offset, draw +offset) so ticks
+  cross the playhead when the delayed audio is heard. Playhead, markers,
+  loop, and the media timeline are untouched (per CLAUDE.md).
+- `Features/Onboarding/OnboardingOverlay.swift` — first-run coach marks for
+  the three non-obvious gestures (markers rail, speed edge, scrub wheel),
+  gated by `@AppStorage("hasSeenOnboarding")`, dismissed with "Got it".
+- `PrivacyInfo.xcprivacy` (app bundle root) — no tracking, no collected
+  data, UserDefaults required-reason `CA92.1`. Confirmed copied into the
+  built `.app`.
+
+Checklist:
+- [x] Calibration flow: metronome + tap-to-beat, median-error offset,
+      stored per audio route
+- [x] Offset applied to beat-visual rendering; auto-prompt when an
+      uncalibrated wireless route connects (route observer wired; can't
+      exercise a real BT route in the sim)
+- [x] Gesture onboarding overlays (speed edge, wheel, marker rail)
+- [x] Privacy manifest
+- [x] Verified in sim: builds; app launches clean (route observer +
+      latency init run without crashing; route name reads "Speaker");
+      onboarding overlay renders on first run; calibration sheet renders
+      with the live route name, tap pad, readout, and controls
+- [ ] **Memory/perf pass with a 10-minute 4K video** — needs a device +
+      real 4K footage (deferred).
+- [ ] **TestFlight build + App Store metadata + Privacy manifest audit on
+      a real archive** — needs signing + App Store Connect (deferred).
+- [ ] The real "done when": external testers on AirPods report markers
+      "feel on beat" + a live TestFlight build — needs hardware + TestFlight.
+      Calibration offset sign convention (positive = tap late / audio
+      delayed → grid drawn later) is assumed; confirm on a device with real
+      BT latency.
+
 ## Next up
 
-1. Hardware pass: wheel feel (τ=0.18, dead-stop thresholds), speed
+1. M6 ship items: archive + TestFlight build, App Store metadata, and a
+   memory/perf pass with a 10-minute 4K video (all need device/App Store
+   Connect). Confirm the latency offset sign on a real Bluetooth route.
+2. Hardware pass: wheel feel (τ=0.18, dead-stop thresholds), speed
    gesture (24 pt/step), count-off timing, haptics, frame rate, and M5
    loop-wrap timing (does the wrap land on the beat at 60%?).
-2. Validate M2 tempo detection against real dance videos (5-video test).
-3. M1 leftover: share-sheet extension target (create in Xcode).
-4. Start M6: Bluetooth latency calibration & ship prep.
+3. Validate M2 tempo detection against real dance videos (5-video test).
+4. M1 leftover: share-sheet extension target (create in Xcode).
+
+All six roadmap milestones (M1–M6) now have their engineering built; what
+remains is device/hardware validation, real-footage testing, the
+share-sheet extension, and the actual TestFlight/App Store submission.
 
 ## Open decisions
 
@@ -262,6 +322,25 @@ Checklist:
   that single owner today — keep it that way.
 
 ## Session log
+
+### 2026-07-06 (fourth session)
+- Speed follow-ups on M4: fixed mid-playback speed changes (setRate now uses
+  `playImmediately(atRate:)` so they apply live even with
+  automaticallyWaitsToMinimizeStalling on) and added the bottom-right
+  `SpeedResetButton` above the wheel.
+- Built M6 (latency calibration & ship), entering Phase 4. New
+  `Core/Sync/LatencyStore` (per-route offsets), `Features/Calibration/`
+  (tap-to-beat calibrator + sheet), `Features/Onboarding/` (first-run coach
+  marks), `PrivacyInfo.xcprivacy`. AppState gained latency state + a route
+  observer + auto-prompt; ScrubWheelView shifts the beat grid by the offset;
+  transport gained a headphones (calibrate) button.
+- Verified in sim: builds clean; app launches without crashing (route
+  observer + latency init OK, route reads "Speaker"); onboarding overlay
+  renders on first run; calibration sheet renders (live route name, tap pad,
+  Taps/Offset readout, Start/Save); `PrivacyInfo.xcprivacy` confirmed inside
+  the built `.app`. Deferred (need device/App Store Connect): 10-min 4K perf
+  pass, TestFlight/App Store metadata, and confirming the offset sign on a
+  real BT route.
 
 ### 2026-07-06 (third session)
 - Built M5 (markers & A/B loops), moving into Phase 3. New

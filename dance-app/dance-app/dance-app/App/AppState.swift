@@ -1,3 +1,4 @@
+import AVFAudio
 import CoreGraphics
 import Foundation
 import Observation
@@ -10,10 +11,29 @@ final class AppState {
     let beats = BeatsModel()
     let markers = MarkersModel()
 
+    // Latency calibration (M6). Signed offset (seconds) for the current
+    // output route; beat visuals shift by it so they line up with delayed
+    // (Bluetooth) audio. The media timeline is never modified.
+    private(set) var latencyOffset: Double = 0
+    private(set) var calibrationRouteName = "Output"
+    /// Auto-prompt when an uncalibrated wireless route connects.
+    var showCalibrationPrompt = false
+    /// Drives the calibration sheet.
+    var showCalibrationSheet = false
+    @ObservationIgnored private var routeObserver: NSObjectProtocol?
+
     init() {
         // Drive A/B looping off the master playhead.
         playback.onTick = { [weak self] time in
             self?.handlePlayheadTick(time)
+        }
+        refreshLatencyForCurrentRoute()
+        routeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleRouteChange() }
         }
     }
 
@@ -308,6 +328,31 @@ final class AppState {
         } else {
             playback.seek(to: start)
         }
+    }
+
+    // MARK: - Latency calibration
+
+    private func refreshLatencyForCurrentRoute() {
+        latencyOffset = LatencyStore.offset(forRouteKey: LatencyStore.currentRouteKey()) ?? 0
+        calibrationRouteName = LatencyStore.currentRouteName()
+    }
+
+    private func handleRouteChange() {
+        let key = LatencyStore.currentRouteKey()
+        latencyOffset = LatencyStore.offset(forRouteKey: key) ?? 0
+        calibrationRouteName = LatencyStore.currentRouteName()
+        // Nudge the user to calibrate the first time a wireless output with
+        // no stored offset appears.
+        if LatencyStore.currentRouteIsWireless(), LatencyStore.offset(forRouteKey: key) == nil {
+            showCalibrationPrompt = true
+        }
+    }
+
+    /// Store the calibrated offset for the current route and apply it live.
+    func applyCalibration(offset: Double) {
+        LatencyStore.setOffset(offset, forRouteKey: LatencyStore.currentRouteKey())
+        latencyOffset = offset
+        showCalibrationPrompt = false
     }
 
     func saveState() {
