@@ -138,7 +138,7 @@ private struct OnboardingStep {
             icon: "speedometer",
             location: "Right edge",
             title: "Practice speed",
-            detail: "Hold the right edge and drag up or down to change speed. Slide inward for 5% steps. Tap the floating percentage on the video to return to 100%."
+            detail: "Hold the right edge and drag up or down to change speed. Move horizontally to switch between 1% and 5% increments. Tap the floating percentage on the video to return to 100%."
         ),
         OnboardingStep(
             icon: "metronome",

@@ -59,6 +59,9 @@ final class AppState {
 
     // Speed control & count-off
     var speedGestureActive = false
+    /// Current speed-gesture step size. The gesture always begins in 1%
+    /// mode and switches to 5% after moving horizontally into the video.
+    var speedGestureIncrementPercent = 1
     /// Finger location (window coords) while the speed gesture is active.
     var speedGesturePoint: CGPoint?
     var countOffEnabled = false

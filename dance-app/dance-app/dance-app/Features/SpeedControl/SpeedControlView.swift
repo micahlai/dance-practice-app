@@ -9,27 +9,58 @@ struct SpeedRail: View {
 
     var body: some View {
         ZStack {
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 Spacer()
-                Image(systemName: "chevron.left")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.3))
-                Text("SPEED")
-                    .font(.caption2.weight(.semibold))
-                    .kerning(2)
-                    .foregroundStyle(.white.opacity(0.3))
-                    .rotationEffect(.degrees(90))
-                    .fixedSize()
+
                 Text(ratePercent)
+                    .font(.title3.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(app.playback.rate < 1 ? Color.accentColor : .white.opacity(0.72))
+
+                Text("\(app.speedGestureIncrementPercent)% increments")
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
-                    .foregroundStyle(app.playback.rate < 1 ? Color.accentColor : .white.opacity(0.3))
+                    .foregroundStyle(app.speedGestureActive ? Color.black : Color.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        app.speedGestureActive ? Color.accentColor : Color.white.opacity(0.12),
+                        in: Capsule()
+                    )
+
+                Image(systemName: "arrow.up.and.down")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.68))
+
+                Text("Hold and drag for speed change")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .multilineTextAlignment(.center)
+
+                Divider()
+                    .overlay(.white.opacity(0.12))
+                    .frame(width: 72)
+
+                Image(systemName: "arrow.left.and.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+
+                Text("Move horizontally to change increments")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.58))
+                    .multilineTextAlignment(.center)
+
                 Spacer()
             }
+            .padding(.horizontal, 12)
             SpeedGestureCatcher()
         }
-        .frame(width: 56)
+        .frame(width: 132)
         .background(.black.opacity(0.6))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Speed control, \(ratePercent), \(app.speedGestureIncrementPercent) percent increments. Hold and drag vertically to change speed. Move horizontally to change increments."
+        )
     }
 
     private var ratePercent: String {
@@ -86,11 +117,16 @@ struct SpeedGestureCatcher: UIViewRepresentable {
     private func connect(_ view: SpeedGestureUIView) {
         let app = self.app
         view.currentRate = { app.playback.rate }
-        view.onBegin = { app.speedGestureActive = true }
+        view.onBegin = {
+            app.speedGestureActive = true
+            app.speedGestureIncrementPercent = 1
+        }
         view.onChange = { app.playback.setRate($0) }
+        view.onIncrementChange = { app.speedGestureIncrementPercent = $0 }
         view.onMove = { app.speedGesturePoint = $0 }
         view.onEnd = {
             app.speedGestureActive = false
+            app.speedGestureIncrementPercent = 1
             app.speedGesturePoint = nil
             app.saveState()
         }
@@ -101,6 +137,7 @@ final class SpeedGestureUIView: UIView {
     var currentRate: (() -> Double)?
     var onBegin: (() -> Void)?
     var onChange: ((Double) -> Void)?
+    var onIncrementChange: ((Int) -> Void)?
     /// Finger location in window coordinates, for positioning the HUD.
     var onMove: ((CGPoint) -> Void)?
     var onEnd: (() -> Void)?
@@ -145,6 +182,7 @@ final class SpeedGestureUIView: UIView {
             zone = .fine
             haptics.prepare()
             onBegin?()
+            onIncrementChange?(1)
             onMove?(convert(location, to: nil))
         case .changed:
             let newZone: Zone = (startX - location.x) > fineZoneWidth ? .coarse : .fine
@@ -153,6 +191,7 @@ final class SpeedGestureUIView: UIView {
                 zone = newZone
                 anchorY = location.y
                 anchorRate = lastSnapped
+                onIncrementChange?(zone == .coarse ? 5 : 1)
             }
 
             // Vertical travel changes the rate; up (smaller y) = faster.
