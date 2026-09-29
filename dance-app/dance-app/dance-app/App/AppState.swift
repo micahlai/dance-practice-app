@@ -45,6 +45,16 @@ final class AppState {
     var scrubAudioEnabled = UserDefaults.standard.object(forKey: "scrubAudioEnabled") as? Bool ?? true {
         didSet { UserDefaults.standard.set(scrubAudioEnabled, forKey: "scrubAudioEnabled") }
     }
+    /// Frame interpolation: cross-blend decoded frames at display refresh to
+    /// double the apparent frame rate. Only applied while scrubbing or
+    /// playing slowed down — at 1× the plain player layer shows.
+    var frameInterpolationEnabled = UserDefaults.standard.object(forKey: "frameInterpolationEnabled") as? Bool ?? false {
+        didSet { UserDefaults.standard.set(frameInterpolationEnabled, forKey: "frameInterpolationEnabled") }
+    }
+    /// True when the interpolation overlay should be rendering right now.
+    var frameInterpolationActive: Bool {
+        frameInterpolationEnabled && (playback.isScrubbing || (playback.isPlaying && playback.rate < 1.0))
+    }
     @ObservationIgnored let scrubAudio = ScrubAudioEngine()
 
     // Speed control & count-off
@@ -112,7 +122,6 @@ final class AppState {
         if playback.duration > 0 {
             startTime = min(max(startTime, 0), playback.duration)
         }
-        playback.seek(to: startTime)
 
         let sequence = Self.countOffSequence(target: grid.count(at: startTime))
         let interval = grid.beatInterval / playback.rate
@@ -125,6 +134,11 @@ final class AppState {
             countInTargetTime = startTime
             playback.seek(to: leadTime)
             playback.play()
+        } else {
+            // Ticks-only: seek to the "1" and prime the video (paused) so the
+            // final play() at the end of the count starts instantly and lands
+            // on the beat, not a fraction late.
+            playback.prerollForStart(at: startTime)
         }
         countOffPlayer.playTicks(counts: sequence, interval: interval)
         countOffTask = Task { [weak self] in

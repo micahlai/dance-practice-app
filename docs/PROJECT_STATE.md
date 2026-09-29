@@ -13,7 +13,7 @@ onboarding + privacy manifest all built & verified in sim; the ship items —
 Store Connect). M5 (markers/loops) built, sim-verified. M4 built (haptics +
 gesture feel need hardware). M3 feel-tuned per user feedback. M2 verified by
 user. M1 leftover: share-sheet extension.
-**Last updated:** 2026-07-06
+**Last updated:** 2026-07-07
 
 ## What exists
 
@@ -290,8 +290,9 @@ Checklist:
    memory/perf pass with a 10-minute 4K video (all need device/App Store
    Connect). Confirm the latency offset sign on a real Bluetooth route.
 2. Hardware pass: wheel feel (τ=0.18, dead-stop thresholds), speed
-   gesture (24 pt/step), count-off timing, haptics, frame rate, and M5
-   loop-wrap timing (does the wrap land on the beat at 60%?).
+   gesture (24 pt/step), count-off timing, haptics, frame rate, M5
+   loop-wrap timing (does the wrap land on the beat at 60%?), and frame
+   interpolation feel (dissolve vs. judder at 25–50%, one-frame latency).
 3. Validate M2 tempo detection against real dance videos (5-video test).
 4. M1 leftover: share-sheet extension target (create in Xcode).
 
@@ -323,6 +324,31 @@ share-sheet extension, and the actual TestFlight/App Store submission.
   that single owner today — keep it that way.
 
 ## Session log
+
+### 2026-07-07 (sixth session)
+- Frame interpolation option: new
+  `Features/Player/FrameInterpolationView.swift` — an MTKView overlay inside
+  the zoomable video view (so pinch/pan carries it) fed by an
+  `AVPlayerItemVideoOutput`; at every display refresh it cross-blends the two
+  most recent decoded frames (CIFilter dissolve, Metal-rendered), doubling the
+  apparent frame rate. Frame blending, not optical flow (which can't run
+  real-time at 4K on-device); picture runs one source frame late while
+  active. Blend fraction denominator is the *measured* host-time spacing of
+  the last two frame arrivals, so it adapts to practice rate and to the
+  irregular arrivals while scrubbing.
+- Gating: only active while scrubbing or playing at < 100%
+  (`AppState.frameInterpolationActive`); at 1× the plain AVPlayerLayer
+  shows and the overlay is hidden + paused (no video-output cost when off).
+  User toggle ("slowmo" icon in the transport bar, next to waveform),
+  persisted via UserDefaults (`frameInterpolationEnabled`, default off).
+- Overlay is transparent when it has no frame yet (and in letterbox regions)
+  so activation never black-flashes; output re-attaches automatically when
+  the player item changes and seeds the current frame immediately.
+- Verified in sim: builds; launches clean with a restored session; slowmo
+  toggle renders in the transport bar. The blended output itself (scrub /
+  slow playback) can't be driven by sim automation — needs a hands-on check,
+  and the blend feel (one-frame latency, dissolve vs. judder at 25–50%)
+  belongs on the hardware-pass list.
 
 ### 2026-07-06 (fifth session)
 - Responsive layout: unlocked orientation (Info.plist iPad orientations now

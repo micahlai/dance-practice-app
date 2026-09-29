@@ -2,7 +2,7 @@ import AVFAudio
 import SwiftUI
 
 @main
-struct dance_appApp: App {
+struct dance_appApp: App { 
     @State private var appState = AppState()
 
     init() {

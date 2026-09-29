@@ -81,7 +81,10 @@ struct PracticeView: View {
     /// fill; the wheel/transport keep fixed heights.
     private var centerColumn: some View {
         VStack(spacing: 0) {
-            ZoomableVideoView(player: app.playback.player)
+            ZoomableVideoView(
+                player: app.playback.player,
+                interpolationActive: app.frameInterpolationActive
+            )
                 .overlay { VideoOverlays() }
                 // The whole right edge of the video is the speed-gesture grab
                 // zone (widened from the 56 pt rail) — and the only one in
@@ -219,6 +222,12 @@ struct TransportBar: View {
                     .frame(width: 36)
             }
             .accessibilityLabel("Calibrate beat latency")
+
+            toggle(
+                "slowmo",
+                isOn: app.frameInterpolationEnabled,
+                hint: "Smooth motion while scrubbing or slowed (frame blending)"
+            ) { app.frameInterpolationEnabled.toggle() }
 
             toggle(
                 "waveform",

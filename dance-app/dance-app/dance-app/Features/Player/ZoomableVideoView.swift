@@ -6,16 +6,23 @@ import UIKit
 /// Double-tap resets zoom.
 struct ZoomableVideoView: UIViewRepresentable {
     let player: AVPlayer
+    /// Frame-blending overlay (doubles apparent fps) — active only while
+    /// scrubbing or playing slowed down.
+    let interpolationActive: Bool
 
     func makeUIView(context: Context) -> ZoomScrollView {
         let view = ZoomScrollView()
         view.delegate = context.coordinator
         view.videoView.playerLayer.player = player
+        view.interpolationView.attach(to: player)
+        view.interpolationView.isActive = interpolationActive
         return view
     }
 
     func updateUIView(_ uiView: ZoomScrollView, context: Context) {
         uiView.videoView.playerLayer.player = player
+        uiView.interpolationView.attach(to: player)
+        uiView.interpolationView.isActive = interpolationActive
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -29,6 +36,8 @@ struct ZoomableVideoView: UIViewRepresentable {
 
 final class ZoomScrollView: UIScrollView {
     let videoView = PlayerLayerView()
+    // Inside videoView so pinch zoom/pan carries the overlay along.
+    let interpolationView = FrameInterpolationView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -39,6 +48,7 @@ final class ZoomScrollView: UIScrollView {
         showsVerticalScrollIndicator = false
         backgroundColor = .black
         addSubview(videoView)
+        videoView.addSubview(interpolationView)
 
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(resetZoom))
         doubleTap.numberOfTapsRequired = 2
@@ -53,6 +63,7 @@ final class ZoomScrollView: UIScrollView {
             videoView.frame = bounds
             contentSize = bounds.size
         }
+        interpolationView.frame = videoView.bounds
     }
 
     @objc private func resetZoom() {

@@ -26,6 +26,11 @@ final class PlaybackEngine {
     @ObservationIgnored private var pendingScrubSeek: Double?
 
     init() {
+        // Media is always local (imported/downloaded), so don't let the
+        // player insert buffering delays — starts are then deterministic,
+        // which count-off relies on to land the video on the beat.
+        player.automaticallyWaitsToMinimizeStalling = false
+
         let interval = CMTime(value: 1, timescale: 30)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
@@ -76,6 +81,24 @@ final class PlaybackEngine {
         }
         player.playImmediately(atRate: Float(rate))
         isPlaying = true
+    }
+
+    /// Seek to `seconds` and, once the seek settles, prime the render
+    /// pipelines so a later `play()` starts with minimal latency. Count-off
+    /// calls this during the count so the video lands on the beat instead of
+    /// a fraction late. (Prerolling before the seek finishes would be
+    /// cancelled by it, hence the completion handler.)
+    func prerollForStart(at seconds: Double) {
+        let clamped = max(0, duration > 0 ? min(seconds, duration) : seconds)
+        currentTime = clamped
+        let time = CMTime(seconds: clamped, preferredTimescale: 600)
+        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+            guard finished else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.player.preroll(atRate: Float(self.rate))
+            }
+        }
     }
 
     func setRate(_ newRate: Double) {
