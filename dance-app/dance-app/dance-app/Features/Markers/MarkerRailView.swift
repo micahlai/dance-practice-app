@@ -3,18 +3,32 @@ import SwiftUI
 /// Left rail: eject, the marker snap list (tap to jump, long-press for
 /// rename / reorder / delete), an add button, and the A/B loop controls.
 struct MarkerRail: View {
+    let collapse: () -> Void
+
     @Environment(AppState.self) private var app
     @State private var renaming: Marker?
     @State private var draftName = ""
 
     var body: some View {
         VStack(spacing: 10) {
-            Button {
-                app.closeDocument()
-            } label: {
-                Image(systemName: "eject.fill")
-                    .font(.title3)
-                    .frame(maxWidth: .infinity)
+            HStack(spacing: 4) {
+                Button {
+                    app.closeDocument()
+                } label: {
+                    Image(systemName: "eject.fill")
+                        .font(.title3)
+                        .frame(maxWidth: .infinity)
+                }
+                .accessibilityLabel("Return home")
+
+                Button(action: collapse) {
+                    Image(systemName: "chevron.left")
+                        .font(.caption.weight(.bold))
+                        .frame(width: 28, height: 32)
+                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Hide markers")
             }
 
             divider
@@ -169,5 +183,33 @@ struct MarkerRail: View {
         guard seconds.isFinite, seconds >= 0 else { return "0:00" }
         let total = Int(seconds)
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// Minimal handle left behind when the marker rail is hidden.
+struct CollapsedMarkerRail: View {
+    let expand: () -> Void
+
+    var body: some View {
+        VStack {
+            Button(action: expand) {
+                VStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                    Image(systemName: "flag.fill")
+                        .font(.caption)
+                }
+                .foregroundStyle(.white.opacity(0.72))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Show markers")
+
+            Spacer()
+        }
+        .frame(width: 36)
+        .background(.black.opacity(0.6))
     }
 }

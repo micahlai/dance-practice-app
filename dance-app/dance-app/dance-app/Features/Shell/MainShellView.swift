@@ -28,6 +28,7 @@ struct MainShellView: View {
 struct PracticeView: View {
     @Environment(AppState.self) private var app
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @AppStorage("markerRailCollapsed") private var markerRailCollapsed = false
     @AppStorage("wheelHeight") private var wheelHeight = 140.0
     @AppStorage("wheelCollapsed") private var wheelCollapsed = false
     @State private var showOnboarding = false
@@ -44,14 +45,27 @@ struct PracticeView: View {
         GeometryReader { geo in
             let portrait = geo.size.height > geo.size.width
             HStack(spacing: 0) {
-                MarkerRail()
+                if markerRailCollapsed {
+                    CollapsedMarkerRail {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            markerRailCollapsed = false
+                        }
+                    }
+                } else {
+                    MarkerRail {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            markerRailCollapsed = true
+                        }
+                    }
+                }
                 centerColumn
-                // Wide layouts get the dedicated speed rail; portrait relies
-                // on the video-edge gesture zone to reclaim the width.
+                // The speed panel disappears in portrait; its gesture remains
+                // available along the video's right edge.
                 if !portrait {
                     SpeedRail()
                 }
             }
+            .animation(.easeInOut(duration: 0.18), value: markerRailCollapsed)
         }
         .overlay {
             if showOnboarding {

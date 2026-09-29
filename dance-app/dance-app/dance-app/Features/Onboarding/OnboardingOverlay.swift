@@ -132,7 +132,7 @@ private struct OnboardingStep {
             icon: "flag.fill",
             location: "Left side",
             title: "Markers and loops",
-            detail: "Tap Eject to return home. Tap Mark to save the current moment, then tap a marker to jump back to it. Use A and B to choose a section and enable the loop to repeat it."
+            detail: "Tap Eject to return home, or the chevron to hide the marker panel. Tap Mark to save the current moment, then tap a marker to jump back to it. Use A and B to choose a section and enable the loop to repeat it."
         ),
         OnboardingStep(
             icon: "speedometer",
