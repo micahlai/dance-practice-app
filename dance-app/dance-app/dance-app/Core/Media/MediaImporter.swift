@@ -4,7 +4,6 @@ import Foundation
 enum MediaImportError: LocalizedError {
     case notPlayable
     case audioExportFailed
-    case badLink
 
     var errorDescription: String? {
         switch self {
@@ -12,8 +11,6 @@ enum MediaImportError: LocalizedError {
             "This file can't be played as a video."
         case .audioExportFailed:
             "Couldn't extract the audio track."
-        case .badLink:
-            "That link doesn't point to a playable video. Only direct video URLs are supported for now."
         }
     }
 }
@@ -44,25 +41,6 @@ enum MediaImporter {
         try FileManager.default.copyItem(at: sourceURL, to: videoURL)
         let audioURL = try await extractAudio(from: videoURL, id: id, into: dir)
         return VideoDocument(id: id, title: title, videoURL: videoURL, audioURL: audioURL)
-    }
-
-    /// Downloads a direct video URL, then imports it.
-    static func importVideo(fromLink link: URL) async throws -> VideoDocument {
-        guard let scheme = link.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
-            throw MediaImportError.badLink
-        }
-        let (tempURL, _) = try await URLSession.shared.download(from: link)
-        // AVFoundation needs a recognizable extension to open the file.
-        let ext = link.pathExtension.isEmpty ? "mp4" : link.pathExtension
-        let renamed = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(UUID().uuidString).\(ext)")
-        try FileManager.default.moveItem(at: tempURL, to: renamed)
-        defer { try? FileManager.default.removeItem(at: renamed) }
-        do {
-            return try await importVideo(from: renamed, title: link.lastPathComponent)
-        } catch MediaImportError.notPlayable {
-            throw MediaImportError.badLink
-        }
     }
 
     private static func extractAudio(from videoURL: URL, id: UUID, into dir: URL) async throws -> URL? {

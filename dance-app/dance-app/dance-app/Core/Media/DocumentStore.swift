@@ -22,6 +22,15 @@ struct StoredPracticeState: Codable {
     var lastOpened: Date
 }
 
+/// A saved practice session that can be reopened from the home screen.
+struct RecentVideo: Identifiable {
+    let document: VideoDocument
+    let state: StoredPracticeState
+
+    var id: UUID { document.id }
+    var lastOpened: Date { state.lastOpened }
+}
+
 enum DocumentStore {
     static func save(_ state: StoredPracticeState) {
         guard let dir = try? MediaImporter.videosDirectory(),
@@ -30,11 +39,12 @@ enum DocumentStore {
         try? data.write(to: url, options: .atomic)
     }
 
-    /// The most recently opened document whose video file still exists.
-    static func loadMostRecent() -> (document: VideoDocument, state: StoredPracticeState)? {
+    /// Saved videos ordered by most recently opened, excluding entries whose
+    /// video file has been removed outside the app.
+    static func loadRecent(limit: Int = 6) -> [RecentVideo] {
         guard let dir = try? MediaImporter.videosDirectory(),
               let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else {
-            return nil
+            return []
         }
         let decoder = JSONDecoder()
         let states = files
@@ -45,13 +55,25 @@ enum DocumentStore {
             }
             .sorted { $0.lastOpened > $1.lastOpened }
 
-        for state in states {
+        return states.lazy.compactMap { state in
             let videoURL = dir.appendingPathComponent(state.videoFileName)
-            guard FileManager.default.fileExists(atPath: videoURL.path) else { continue }
+            guard FileManager.default.fileExists(atPath: videoURL.path) else { return nil }
             let audioURL = state.audioFileName.map { dir.appendingPathComponent($0) }
-            let document = VideoDocument(id: state.id, title: state.title, videoURL: videoURL, audioURL: audioURL)
-            return (document, state)
+            let document = VideoDocument(
+                id: state.id,
+                title: state.title,
+                videoURL: videoURL,
+                audioURL: audioURL
+            )
+            return RecentVideo(document: document, state: state)
         }
-        return nil
+        .prefix(max(0, limit))
+        .map { $0 }
+    }
+
+    /// The most recently opened document whose video file still exists.
+    static func loadMostRecent() -> (document: VideoDocument, state: StoredPracticeState)? {
+        guard let recent = loadRecent(limit: 1).first else { return nil }
+        return (recent.document, recent.state)
     }
 }

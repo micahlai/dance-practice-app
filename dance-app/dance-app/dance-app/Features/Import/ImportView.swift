@@ -23,7 +23,7 @@ struct ImportView: View {
 
     @State private var photoItem: PhotosPickerItem?
     @State private var showsFileImporter = false
-    @State private var linkText = ""
+    @State private var recentVideos: [RecentVideo] = []
     @State private var isImporting = false
     @State private var errorMessage: String?
 
@@ -52,22 +52,7 @@ struct ImportView: View {
             }
             .controlSize(.large)
 
-            HStack(spacing: 12) {
-                TextField("Paste a direct video link…", text: $linkText)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                    .frame(maxWidth: 420)
-                    .onSubmit(importLink)
-                Button("Load", action: importLink)
-                    .buttonStyle(.bordered)
-                    .disabled(trimmedLinkURL == nil)
-            }
-
-            Text("TikTok / YouTube page links aren't supported yet — use a direct video file URL, Photos, or Files.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            recentVideosSection
         }
         .padding(40)
         .disabled(isImporting)
@@ -87,6 +72,9 @@ struct ImportView: View {
         .onChange(of: photoItem) { _, item in
             importPhoto(item)
         }
+        .onAppear {
+            recentVideos = DocumentStore.loadRecent()
+        }
         .alert(
             "Import failed",
             isPresented: Binding(
@@ -100,10 +88,57 @@ struct ImportView: View {
         }
     }
 
-    private var trimmedLinkURL: URL? {
-        let trimmed = linkText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return URL(string: trimmed)
+    @ViewBuilder
+    private var recentVideosSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Recent videos")
+                .font(.headline)
+
+            if recentVideos.isEmpty {
+                Text("Videos you open will appear here.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 18)
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 180), spacing: 12)],
+                    spacing: 12
+                ) {
+                    ForEach(recentVideos) { recent in
+                        Button {
+                            app.load(recent.document, restored: recent.state)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "play.rectangle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(.tint)
+                                    .frame(width: 36, height: 36)
+                                    .background(.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(recent.document.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .lineLimit(1)
+                                    Text(recent.lastOpened, format: .relative(presentation: .named))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .accessibilityHint("Opens this video for practice")
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: 560, alignment: .leading)
     }
 
     private func importPhoto(_ item: PhotosPickerItem?) {
@@ -131,20 +166,12 @@ struct ImportView: View {
         }
     }
 
-    private func importLink() {
-        guard let url = trimmedLinkURL else { return }
-        runImport {
-            try await MediaImporter.importVideo(fromLink: url)
-        }
-    }
-
     private func runImport(_ work: @escaping () async throws -> VideoDocument) {
         isImporting = true
         Task {
             do {
                 app.load(try await work())
                 photoItem = nil
-                linkText = ""
             } catch {
                 errorMessage = error.localizedDescription
             }
