@@ -103,37 +103,29 @@ struct ImportView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 18)
             } else {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 240), spacing: 12)],
-                    spacing: 12
-                ) {
-                    ForEach(recentVideos) { recent in
-                        Button {
-                            app.load(recent.document, restored: recent.state)
-                        } label: {
-                            HStack(spacing: 12) {
-                                VideoThumbnail(videoURL: recent.document.videoURL)
-                                    .frame(width: 88, height: 52)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 14) {
+                        ForEach(recentVideos) { recent in
+                            Button {
+                                app.load(recent.document, restored: recent.state)
+                            } label: {
+                                VStack(spacing: 7) {
+                                    VideoThumbnail(videoURL: recent.document.videoURL)
+                                        .frame(width: 96, height: 128)
 
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(recent.document.title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .lineLimit(1)
                                     Text(recent.lastOpened, format: .relative(presentation: .named))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                        .lineLimit(1)
                                 }
-
-                                Spacer(minLength: 0)
+                                .frame(width: 96)
+                                .contentShape(Rectangle())
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Opens this video for practice")
                         }
-                        .buttonStyle(.plain)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                        .accessibilityHint("Opens this video for practice")
                     }
+                    .padding(.vertical, 2)
                 }
             }
         }
@@ -147,7 +139,7 @@ struct ImportView: View {
                 throw MediaImportError.notPlayable
             }
             defer { try? FileManager.default.removeItem(at: movie.url) }
-            return try await MediaImporter.importVideo(from: movie.url, title: "Photos video")
+            return try await MediaImporter.importVideo(from: movie.url, title: "Video")
         }
     }
 
@@ -185,27 +177,30 @@ private struct VideoThumbnail: View {
     @State private var image: UIImage?
 
     var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(.white.opacity(0.08))
+        GeometryReader { geometry in
+            ZStack {
+                Rectangle()
+                    .fill(.white.opacity(0.08))
 
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Image(systemName: "film")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                } else {
+                    Image(systemName: "film")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
             }
-
-            Image(systemName: "play.fill")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
-                .padding(6)
-                .background(.black.opacity(0.58), in: Circle())
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(.white.opacity(0.12))
+        }
         .task(id: videoURL) {
             image = await VideoThumbnailLoader.image(for: videoURL)
         }
