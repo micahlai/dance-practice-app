@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Left rail: eject, the marker snap list (tap to jump, long-press for
-/// rename / reorder / delete), an add button, and the A/B loop controls.
+/// Left rail: marker snap list (tap to jump, long-press for rename / reorder
+/// / delete), an add button, and the A/B loop controls.
 struct MarkerRail: View {
     let collapse: () -> Void
 
@@ -11,16 +11,10 @@ struct MarkerRail: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 4) {
-                Button {
-                    app.closeDocument()
-                } label: {
-                    Image(systemName: "eject.fill")
-                        .font(.title3)
-                        .frame(maxWidth: .infinity)
-                }
-                .accessibilityLabel("Return home")
-
+            HStack(spacing: 6) {
+                Text("Markers")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 Button(action: collapse) {
                     Image(systemName: "chevron.left")
                         .font(.caption.weight(.bold))
@@ -30,6 +24,7 @@ struct MarkerRail: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Hide markers")
             }
+            .frame(maxWidth: .infinity)
 
             divider
 

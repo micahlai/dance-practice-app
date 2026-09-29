@@ -111,6 +111,20 @@ struct PracticeView: View {
                 .overlay(alignment: .bottomTrailing) {
                     SpeedResetButton()
                 }
+                .overlay(alignment: .topLeading) {
+                    Button {
+                        app.closeDocument()
+                    } label: {
+                        Image(systemName: "house.fill")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(.black.opacity(0.58), in: Circle())
+                            .overlay(Circle().strokeBorder(.white.opacity(0.18)))
+                    }
+                    .padding(16)
+                    .accessibilityLabel("Return home")
+                }
                 .overlay(alignment: .topTrailing) {
                     Button {
                         withAnimation { showOnboarding = true }
