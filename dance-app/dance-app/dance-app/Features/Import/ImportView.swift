@@ -1,5 +1,7 @@
+import AVFoundation
 import PhotosUI
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 /// A movie received from the Photos picker, copied to a temp file.
@@ -102,7 +104,7 @@ struct ImportView: View {
                     .padding(.vertical, 18)
             } else {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 180), spacing: 12)],
+                    columns: [GridItem(.adaptive(minimum: 240), spacing: 12)],
                     spacing: 12
                 ) {
                     ForEach(recentVideos) { recent in
@@ -110,11 +112,8 @@ struct ImportView: View {
                             app.load(recent.document, restored: recent.state)
                         } label: {
                             HStack(spacing: 12) {
-                                Image(systemName: "play.rectangle.fill")
-                                    .font(.title2)
-                                    .foregroundStyle(.tint)
-                                    .frame(width: 36, height: 36)
-                                    .background(.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+                                VideoThumbnail(videoURL: recent.document.videoURL)
+                                    .frame(width: 88, height: 52)
 
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(recent.document.title)
@@ -177,5 +176,68 @@ struct ImportView: View {
             }
             isImporting = false
         }
+    }
+}
+
+private struct VideoThumbnail: View {
+    let videoURL: URL
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.white.opacity(0.08))
+
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "film")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+
+            Image(systemName: "play.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(6)
+                .background(.black.opacity(0.58), in: Circle())
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: videoURL) {
+            image = await VideoThumbnailLoader.image(for: videoURL)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private enum VideoThumbnailLoader {
+    private static let cache = NSCache<NSURL, UIImage>()
+
+    static func image(for videoURL: URL) async -> UIImage? {
+        if let cached = cache.object(forKey: videoURL as NSURL) {
+            return cached
+        }
+
+        let asset = AVURLAsset(url: videoURL)
+        guard let duration = try? await asset.load(.duration) else { return nil }
+        let durationSeconds = CMTimeGetSeconds(duration)
+        guard durationSeconds.isFinite else { return nil }
+
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 352, height: 208)
+
+        let middle = CMTime(
+            seconds: max(durationSeconds / 2, 0),
+            preferredTimescale: 600
+        )
+
+        guard let frame = try? await generator.image(at: middle).image else { return nil }
+        let image = UIImage(cgImage: frame)
+        cache.setObject(image, forKey: videoURL as NSURL)
+        return image
     }
 }
