@@ -32,6 +32,7 @@ struct PracticeView: View {
     @AppStorage("wheelHeight") private var wheelHeight = 140.0
     @AppStorage("wheelCollapsed") private var wheelCollapsed = false
     @State private var showOnboarding = false
+    @State private var compactMarkerPresented = false
 
     private let wheelRange: ClosedRange<Double> = 64...340
     private let collapsedWheelHeight = 40.0
@@ -44,28 +45,51 @@ struct PracticeView: View {
         @Bindable var app = app
         GeometryReader { geo in
             let portrait = geo.size.height > geo.size.width
-            HStack(spacing: 0) {
-                if markerRailCollapsed {
-                    CollapsedMarkerRail {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            markerRailCollapsed = false
+            let compactLayout = geo.size.width < 900
+
+            if compactLayout {
+                ZStack(alignment: .leading) {
+                    centerColumn
+
+                    if compactMarkerPresented {
+                        MarkerRail {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                compactMarkerPresented = false
+                            }
                         }
-                    }
-                } else {
-                    MarkerRail {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            markerRailCollapsed = true
+                        .transition(.move(edge: .leading))
+                    } else {
+                        CollapsedMarkerRail {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                compactMarkerPresented = true
+                            }
                         }
                     }
                 }
-                centerColumn
-                // The speed panel disappears in portrait; its gesture remains
-                // available along the video's right edge.
-                if !portrait {
-                    SpeedRail()
+            } else {
+                HStack(spacing: 0) {
+                    if markerRailCollapsed {
+                        CollapsedMarkerRail {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                markerRailCollapsed = false
+                            }
+                        }
+                    } else {
+                        MarkerRail {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                markerRailCollapsed = true
+                            }
+                        }
+                    }
+                    centerColumn
+                    // The speed panel disappears in portrait; its gesture
+                    // remains available along the video's right edge.
+                    if !portrait {
+                        SpeedRail()
+                    }
                 }
+                .animation(.easeInOut(duration: 0.18), value: markerRailCollapsed)
             }
-            .animation(.easeInOut(duration: 0.18), value: markerRailCollapsed)
         }
         .overlay {
             if showOnboarding {
@@ -198,7 +222,25 @@ struct TransportBar: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
-        HStack(spacing: 16) {
+        GeometryReader { geometry in
+            let compact = geometry.size.width < 700
+
+            if compact {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    controlsRow(includeSpacer: false)
+                        .padding(.horizontal, 12)
+                }
+            } else {
+                controlsRow(includeSpacer: true)
+                    .padding(.horizontal, 20)
+            }
+        }
+        .frame(height: 56)
+        .background(.ultraThinMaterial)
+    }
+
+    private func controlsRow(includeSpacer: Bool) -> some View {
+        HStack(spacing: includeSpacer ? 16 : 12) {
             Button {
                 app.togglePlayPause()
             } label: {
@@ -225,7 +267,9 @@ struct TransportBar: View {
                 .accessibilityLabel("Reset speed to 100%")
             }
 
-            Spacer()
+            if includeSpacer {
+                Spacer()
+            }
 
             toggle(
                 "metronome",
@@ -269,9 +313,7 @@ struct TransportBar: View {
                 hint: "Scrub audio"
             ) { app.scrubAudioEnabled.toggle() }
         }
-        .padding(.horizontal, 20)
-        .frame(height: 56)
-        .background(.ultraThinMaterial)
+        .frame(minHeight: 56)
     }
 
     private func toggle(
