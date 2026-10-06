@@ -383,7 +383,15 @@ struct TransportBar: View {
                 .helpTarget(.waveform)
 
             toggle(
-                app.scrubAudioEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill",
+                app.musicMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                isOn: !app.musicMuted,
+                hint: "Music audio"
+            ) { app.musicMuted.toggle() }
+                .id(HelpTarget.musicAudio)
+                .helpTarget(.musicAudio)
+
+            toggle(
+                app.scrubAudioEnabled ? "opticaldisc.fill" : "opticaldisc",
                 isOn: app.scrubAudioEnabled,
                 hint: "Scrub audio"
             ) { app.scrubAudioEnabled.toggle() }
@@ -465,12 +473,13 @@ struct TransportBar: View {
         case "Play music during count-off": "Count-in"
         case "Smooth motion while scrubbing or slowed (frame blending)": "Smooth"
         case "Waveform": "Wave"
+        case "Music audio": "Music"
         case "Scrub audio": "Scrub"
         default: hint
         }
     }
 
     private var transportTargets: Set<HelpTarget> {
-        [.beatClicks, .playback, .countOff, .musicCountIn, .calibration, .smoothMotion, .waveform, .scrubAudio]
+        [.beatClicks, .playback, .countOff, .musicCountIn, .calibration, .smoothMotion, .waveform, .musicAudio, .scrubAudio]
     }
 }

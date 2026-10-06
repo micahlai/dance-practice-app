@@ -2,7 +2,7 @@ import SwiftUI
 
 enum HelpTarget: String, Hashable {
     case beatClicks, tempo, beatAlignment, playback, scrubWheel, markers, speed
-    case countOff, musicCountIn, calibration, smoothMotion, waveform, scrubAudio
+    case countOff, musicCountIn, calibration, smoothMotion, waveform, musicAudio, scrubAudio
 }
 
 private struct ActiveHelpTargetKey: EnvironmentKey {
@@ -45,13 +45,14 @@ struct HelpTourStep {
         .init(target: .scrubWheel, icon: "hand.draw.fill", eyebrow: "TIMELINE", title: "Find an exact moment", detail: "Drag the wheel to move through the video with inertia, and pinch to zoom the timeline. Drag the handle above it to resize or collapse the wheel."),
         .init(target: .markers, icon: "flag.fill", eyebrow: "LEFT SIDE", title: "Save marks and loops", detail: "Tap Mark to save the current moment. Set A and B around a section, then turn on Loop to repeat it. Use the chevron to hide or show this panel."),
         .init(target: .speed, icon: "speedometer", eyebrow: "RIGHT EDGE", title: "Change practice speed", detail: "Hold the video's right edge and drag vertically. Move horizontally to switch between 1% and 5% steps. Tap the floating percentage to return to 100%."),
-        .init(target: .countOff, icon: "metronome", eyebrow: "BOTTOM CONTROLS · 1 OF 7", title: "Count-off", detail: "Turn on a counted lead-in before playback so you have time to get ready and enter on the beat."),
-        .init(target: .musicCountIn, icon: "music.note", eyebrow: "BOTTOM CONTROLS · 2 OF 7", title: "Music count-in", detail: "Include the video's music during the lead-in. This button becomes available after Count-off is turned on."),
-        .init(target: .beatClicks, icon: "waveform.path.ecg", eyebrow: "BOTTOM CONTROLS · 3 OF 7", title: "Beat clicks", detail: "Tap once for one click per beat, again for clicks on the beat and half count (&), and a third time to turn clicks off. The badge shows the active mode."),
-        .init(target: .calibration, icon: "headphones", eyebrow: "BOTTOM CONTROLS · 4 OF 7", title: "Audio calibration", detail: "Open latency calibration when Bluetooth headphones or speakers make clicks sound slightly ahead of or behind the beat markers."),
-        .init(target: .smoothMotion, icon: "slowmo", eyebrow: "BOTTOM CONTROLS · 5 OF 7", title: "Smooth motion", detail: "Blend adjacent frames while scrubbing or playing below full speed for smoother-looking movement."),
-        .init(target: .waveform, icon: "waveform", eyebrow: "BOTTOM CONTROLS · 6 OF 7", title: "Waveform", detail: "Show or hide the audio waveform behind the scrub wheel to make musical events easier to find."),
-        .init(target: .scrubAudio, icon: "speaker.wave.2.fill", eyebrow: "BOTTOM CONTROLS · 7 OF 7", title: "Scrub audio", detail: "Turn sound while scrubbing on or off. Silent scrubbing is useful when you only need visual positioning.")
+        .init(target: .countOff, icon: "metronome", eyebrow: "BOTTOM CONTROLS · 1 OF 8", title: "Count-off", detail: "Turn on a counted lead-in before playback so you have time to get ready and enter on the beat."),
+        .init(target: .musicCountIn, icon: "music.note", eyebrow: "BOTTOM CONTROLS · 2 OF 8", title: "Music count-in", detail: "Include the video's music during the lead-in. This button becomes available after Count-off is turned on."),
+        .init(target: .beatClicks, icon: "waveform.path.ecg", eyebrow: "BOTTOM CONTROLS · 3 OF 8", title: "Beat clicks", detail: "Tap once for one click per beat, again for clicks on the beat and half count (&), and a third time to turn clicks off. The badge shows the active mode."),
+        .init(target: .calibration, icon: "headphones", eyebrow: "BOTTOM CONTROLS · 4 OF 8", title: "Audio calibration", detail: "Open latency calibration when Bluetooth headphones or speakers make clicks sound slightly ahead of or behind the beat markers."),
+        .init(target: .smoothMotion, icon: "slowmo", eyebrow: "BOTTOM CONTROLS · 5 OF 8", title: "Smooth motion", detail: "Blend adjacent frames while scrubbing or playing below full speed for smoother-looking movement."),
+        .init(target: .waveform, icon: "waveform", eyebrow: "BOTTOM CONTROLS · 6 OF 8", title: "Waveform", detail: "Show or hide the audio waveform behind the scrub wheel to make musical events easier to find."),
+        .init(target: .musicAudio, icon: "speaker.slash.fill", eyebrow: "BOTTOM CONTROLS · 7 OF 8", title: "Music audio", detail: "Mute or restore the video's music without changing beat clicks or the separate sound used while scrubbing."),
+        .init(target: .scrubAudio, icon: "opticaldisc", eyebrow: "BOTTOM CONTROLS · 8 OF 8", title: "Scrub audio", detail: "The optical-disc button controls only the sound heard while turning the scrub wheel. The filled disc means scrub sound is on.")
     ]
 }
 

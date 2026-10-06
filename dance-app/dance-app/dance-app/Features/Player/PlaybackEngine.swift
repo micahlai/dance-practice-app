@@ -133,6 +133,10 @@ final class PlaybackEngine {
         }
     }
 
+    func setMuted(_ muted: Bool) {
+        player.isMuted = muted
+    }
+
     func pause() {
         player.pause()
         isPlaying = false

@@ -27,6 +27,7 @@ final class AppState {
         playback.onTick = { [weak self] time in
             self?.handlePlayheadTick(time)
         }
+        playback.setMuted(musicMuted)
         refreshLatencyForCurrentRoute()
         routeObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.routeChangeNotification,
@@ -44,6 +45,14 @@ final class AppState {
     /// Audible DJ-scratch while scrubbing. Off = silent scrubbing.
     var scrubAudioEnabled = UserDefaults.standard.object(forKey: "scrubAudioEnabled") as? Bool ?? true {
         didSet { UserDefaults.standard.set(scrubAudioEnabled, forKey: "scrubAudioEnabled") }
+    }
+    /// Normal video audio. Independent from the short audio heard while
+    /// turning the scrub wheel.
+    var musicMuted = UserDefaults.standard.object(forKey: "musicMuted") as? Bool ?? false {
+        didSet {
+            UserDefaults.standard.set(musicMuted, forKey: "musicMuted")
+            playback.setMuted(musicMuted)
+        }
     }
     /// Frame interpolation: cross-blend decoded frames at display refresh to
     /// double the apparent frame rate. Only applied while scrubbing or
