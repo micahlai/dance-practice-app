@@ -32,6 +32,7 @@ struct PracticeView: View {
     @AppStorage("wheelHeight") private var wheelHeight = 140.0
     @AppStorage("wheelCollapsed") private var wheelCollapsed = false
     @State private var showOnboarding = false
+    @State private var helpStepIndex = 0
     @State private var compactMarkerPresented = false
 
     private let wheelRange: ClosedRange<Double> = 64...340
@@ -57,26 +58,30 @@ struct PracticeView: View {
                                 markerRailCollapsed = false
                             }
                         }
+                        .helpTarget(.markers)
                     } else {
                         MarkerRail {
                             withAnimation(.easeInOut(duration: 0.18)) {
                                 markerRailCollapsed = true
                             }
                         }
+                        .helpTarget(.markers)
                     }
                     centerColumn
                     // The speed panel disappears in portrait; its gesture
                     // remains available along the video's right edge.
                     if !portrait {
                         SpeedRail()
+                            .helpTarget(.speed)
                     }
                 }
                 .animation(.easeInOut(duration: 0.18), value: markerRailCollapsed)
             }
         }
-        .overlay {
+        .environment(\.activeHelpTarget, activeHelpTarget)
+        .overlayPreferenceValue(HelpTargetPreferenceKey.self) { targets in
             if showOnboarding {
-                OnboardingOverlay {
+                OnboardingOverlay(stepIndex: $helpStepIndex, targets: targets) {
                     hasSeenOnboarding = true
                     withAnimation { showOnboarding = false }
                 }
@@ -94,8 +99,16 @@ struct PracticeView: View {
             Text("Beat markers may drift over \(app.calibrationRouteName). Calibrate so they feel on beat.")
         }
         .task {
-            if !hasSeenOnboarding { showOnboarding = true }
+            if !hasSeenOnboarding {
+                helpStepIndex = 0
+                showOnboarding = true
+            }
         }
+    }
+
+    private var activeHelpTarget: HelpTarget? {
+        guard showOnboarding, HelpTourStep.all.indices.contains(helpStepIndex) else { return nil }
+        return HelpTourStep.all[helpStepIndex].target
     }
 
     /// Video + controls, shared by both layouts. The video area flexes to
@@ -121,6 +134,7 @@ struct PracticeView: View {
                         }
                     }
                     .padding(.top, 60)
+                    .helpTarget(.markers)
                     .transition(.move(edge: .leading))
                 } else {
                     CollapsedMarkerRail {
@@ -129,6 +143,7 @@ struct PracticeView: View {
                         }
                     }
                     .padding(.top, 60)
+                    .helpTarget(.markers)
                 }
             }
             BeatControlsRow()
@@ -155,6 +170,7 @@ struct PracticeView: View {
             .overlay(alignment: .trailing) {
                 SpeedGestureCatcher()
                     .frame(width: 44)
+                    .helpTarget(.speed)
             }
             // Reset-to-100% sits at the bottom-right, above the wheel.
             .overlay(alignment: .bottomTrailing) {
@@ -176,6 +192,7 @@ struct PracticeView: View {
             }
             .overlay(alignment: .topTrailing) {
                 Button {
+                    helpStepIndex = 0
                     withAnimation { showOnboarding = true }
                 } label: {
                     Image(systemName: "questionmark")
@@ -200,6 +217,7 @@ struct PracticeView: View {
             )
             ScrubWheelView()
                 .frame(height: effectiveWheelHeight)
+                .helpTarget(.scrubWheel)
             TransportBar()
         }
     }
@@ -248,15 +266,24 @@ struct VideoOverlays: View {
 /// in the scrub wheel above.
 struct TransportBar: View {
     @Environment(AppState.self) private var app
+    @Environment(\.activeHelpTarget) private var activeHelpTarget
 
     var body: some View {
         GeometryReader { geometry in
             let compact = geometry.size.width < 700
 
             if compact {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    controlsRow(includeSpacer: false)
-                        .padding(.horizontal, 12)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        controlsRow(includeSpacer: false)
+                            .padding(.horizontal, 12)
+                    }
+                    .onChange(of: activeHelpTarget, initial: true) { _, target in
+                        guard let target, transportTargets.contains(target) else { return }
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            proxy.scrollTo(target, anchor: .center)
+                        }
+                    }
                 }
             } else {
                 controlsRow(includeSpacer: true)
@@ -276,6 +303,8 @@ struct TransportBar: View {
                     .font(.title2)
                     .frame(width: 44)
             }
+            .id(HelpTarget.playback)
+            .helpTarget(.playback)
 
             Text("\(timeString(app.playback.currentTime)) / \(timeString(app.playback.duration))")
                 .monospacedDigit()
@@ -304,6 +333,8 @@ struct TransportBar: View {
                 isOn: app.countOffEnabled,
                 hint: "Count-off"
             ) { app.countOffEnabled.toggle(); app.saveState() }
+                .id(HelpTarget.countOff)
+                .helpTarget(.countOff)
 
             toggle(
                 "music.note",
@@ -312,8 +343,12 @@ struct TransportBar: View {
             ) { app.countInMusicEnabled.toggle(); app.saveState() }
                 .disabled(!app.countOffEnabled)
                 .opacity(app.countOffEnabled ? 1 : 0.4)
+                .id(HelpTarget.musicCountIn)
+                .helpTarget(.musicCountIn)
 
             beatClickButton
+                .id(HelpTarget.beatClicks)
+                .helpTarget(.beatClicks)
 
             Button {
                 app.showCalibrationSheet = true
@@ -324,24 +359,32 @@ struct TransportBar: View {
                     .frame(width: 36)
             }
             .accessibilityLabel("Calibrate beat latency")
+            .id(HelpTarget.calibration)
+            .helpTarget(.calibration)
 
             toggle(
                 "slowmo",
                 isOn: app.frameInterpolationEnabled,
                 hint: "Smooth motion while scrubbing or slowed (frame blending)"
             ) { app.frameInterpolationEnabled.toggle() }
+                .id(HelpTarget.smoothMotion)
+                .helpTarget(.smoothMotion)
 
             toggle(
                 "waveform",
                 isOn: app.showWaveform,
                 hint: "Waveform"
             ) { app.showWaveform.toggle() }
+                .id(HelpTarget.waveform)
+                .helpTarget(.waveform)
 
             toggle(
                 app.scrubAudioEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill",
                 isOn: app.scrubAudioEnabled,
                 hint: "Scrub audio"
             ) { app.scrubAudioEnabled.toggle() }
+                .id(HelpTarget.scrubAudio)
+                .helpTarget(.scrubAudio)
         }
         .frame(minHeight: 56)
     }
@@ -389,5 +432,9 @@ struct TransportBar: View {
         guard seconds.isFinite, seconds >= 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    private var transportTargets: Set<HelpTarget> {
+        [.beatClicks, .playback, .countOff, .musicCountIn, .calibration, .smoothMotion, .waveform, .scrubAudio]
     }
 }

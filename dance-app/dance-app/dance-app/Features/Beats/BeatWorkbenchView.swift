@@ -4,18 +4,27 @@ import SwiftUI
 /// the waveform and beat grid.
 struct BeatControlsRow: View {
     @Environment(AppState.self) private var app
+    @Environment(\.activeHelpTarget) private var activeHelpTarget
     @State private var bpmText = ""
     @State private var isEditingBPM = false
 
     var body: some View {
         // Horizontally scrollable so the full control set stays reachable at
         // any width (narrow portrait / split view), never clipped.
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                content
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    content
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
+            .onChange(of: activeHelpTarget, initial: true) { _, target in
+                guard target == .tempo || target == .beatAlignment else { return }
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    proxy.scrollTo(target, anchor: .center)
+                }
+            }
         }
         .frame(height: 44)
         .background(.black.opacity(0.4))
@@ -23,6 +32,7 @@ struct BeatControlsRow: View {
 
     @ViewBuilder private var content: some View {
         if let grid = app.beats.grid {
+            HStack(spacing: 10) {
                 // Tap to type an exact BPM.
                 Button {
                     bpmText = String(format: "%.1f", grid.bpm)
@@ -55,9 +65,13 @@ struct BeatControlsRow: View {
                 adjust("+1") { $0.bpm += 1 }
                 adjust("½×") { $0.bpm /= 2 }
                 adjust("2×") { $0.bpm *= 2 }
+            }
+            .id(HelpTarget.tempo)
+            .helpTarget(.tempo)
 
-                Divider().frame(height: 20)
+            Divider().frame(height: 20)
 
+            HStack(spacing: 10) {
                 Button("Set 1") {
                     let now = app.playback.currentTime
                     app.updateGrid { $0.firstBeatTime = now }
@@ -70,8 +84,11 @@ struct BeatControlsRow: View {
                 adjust("+10ms") { $0.firstBeatTime += 0.01 }
                 adjust("◀ beat") { $0.firstBeatTime -= $0.beatInterval }
                 adjust("beat ▶") { $0.firstBeatTime += $0.beatInterval }
+            }
+            .id(HelpTarget.beatAlignment)
+            .helpTarget(.beatAlignment)
 
-                Divider().frame(height: 20)
+            Divider().frame(height: 20)
 
                 // Tap to snap the grid back to the detected tempo.
                 if let detected = app.beats.detectedBPM,
@@ -99,6 +116,9 @@ struct BeatControlsRow: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .font(.caption)
+                .id(HelpTarget.tempo)
+                .helpTarget(.tempo)
+                .helpTarget(.beatAlignment)
             }
     }
 
