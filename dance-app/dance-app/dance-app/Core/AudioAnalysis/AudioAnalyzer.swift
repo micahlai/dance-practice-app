@@ -80,8 +80,10 @@ enum AudioAnalyzer {
         let envelopeRate = sampleRate / Double(hop)
         detrend(&flux, window: Int(envelopeRate))
 
-        // Autocorrelate over the 60–200 BPM lag range; keep 2x lags around for
-        // harmonic (half-tempo) support.
+        // Autocorrelate over the 60–200 BPM lag range. Instead of letting a
+        // quiet intro dominate the answer, score a consensus of the song's
+        // early/middle/late body and its strongest high-energy passages. A
+        // lower-weight whole-song vote keeps the result holistic.
         let minLag = max(1, Int(envelopeRate * 60 / 200))
         let maxLag = Int(envelopeRate * 60 / 60)
         let acfMax = min(flux.count - 1, maxLag * 2)
@@ -89,17 +91,24 @@ enum AudioAnalyzer {
             return TempoEstimate(bpm: 120, confidence: 0, firstBeatTime: 0)
         }
 
+        let regions = tempoAnalysisRegions(in: flux, envelopeRate: envelopeRate)
         var acf = [Float](repeating: 0, count: acfMax + 1)
-        flux.withUnsafeBufferPointer { buffer in
-            let base = buffer.baseAddress!
-            var r0: Float = 0
-            vDSP_dotpr(base, 1, base, 1, &r0, vDSP_Length(flux.count))
-            guard r0 > 0 else { return }
+        var totalWeight: Float = 0
+        for region in regions {
+            let local = normalizedAutocorrelation(
+                Array(flux[region.range]),
+                minLag: minLag,
+                maxLag: acfMax
+            )
+            guard local.contains(where: { $0 > 0 }) else { continue }
             for lag in minLag...acfMax {
-                var r: Float = 0
-                vDSP_dotpr(base, 1, base + lag, 1, &r, vDSP_Length(flux.count - lag))
-                acf[lag] = r / r0
+                acf[lag] += local[lag] * region.weight
             }
+            totalWeight += region.weight
+        }
+        if totalWeight > 0 {
+            var inverseWeight = 1 / totalWeight
+            vDSP_vsmul(acf, 1, &inverseWeight, &acf, 1, vDSP_Length(acf.count))
         }
 
         // Score candidates with harmonic support and a mild log-normal prior
@@ -134,7 +143,9 @@ enum AudioAnalyzer {
         let bpm = envelopeRate * 60 / lagF
         let confidence = Double(min(max(acf[bestLag], 0), 1))
 
-        // Beat phase: the comb offset that collects the most onset energy.
+        // Beat phase: the comb offset that collects the strongest onset
+        // energy across the track. Squaring makes clear transients win over
+        // low-level noise while still reviewing the entire song.
         let lag = max(1, Int(lagF.rounded()))
         var bestPhase = 0
         var bestPhaseScore: Float = -1
@@ -142,7 +153,7 @@ enum AudioAnalyzer {
             var score: Float = 0
             var i = phase
             while i < flux.count {
-                score += flux[i]
+                score += flux[i] * flux[i]
                 i += lag
             }
             if score > bestPhaseScore {
@@ -153,6 +164,82 @@ enum AudioAnalyzer {
         let firstBeatTime = (Double(bestPhase) * Double(hop) + Double(frameSize) / 2) / sampleRate
 
         return TempoEstimate(bpm: bpm, confidence: confidence, firstBeatTime: firstBeatTime)
+    }
+
+    private struct TempoRegion {
+        let range: Range<Int>
+        let weight: Float
+    }
+
+    /// A balanced set of views into the song: three positional windows,
+    /// two strongest-energy windows, and the whole song as a stabilizer.
+    nonisolated private static func tempoAnalysisRegions(
+        in envelope: [Float],
+        envelopeRate: Double
+    ) -> [TempoRegion] {
+        let minimumFrames = max(64, Int(envelopeRate * 8))
+        guard envelope.count > minimumFrames else {
+            return [TempoRegion(range: envelope.indices, weight: 1)]
+        }
+
+        let window = min(envelope.count, max(minimumFrames, Int(envelopeRate * 24)))
+        let maxStart = envelope.count - window
+        var starts = [
+            Int(Double(maxStart) * 0.18),
+            Int(Double(maxStart) * 0.50),
+            Int(Double(maxStart) * 0.82)
+        ]
+
+        var prefix = [Double](repeating: 0, count: envelope.count + 1)
+        for i in envelope.indices {
+            prefix[i + 1] = prefix[i] + Double(envelope[i] * envelope[i])
+        }
+        func energy(at start: Int) -> Double {
+            prefix[start + window] - prefix[start]
+        }
+
+        let scanStep = max(1, window / 4)
+        let energyCandidates = stride(from: 0, through: maxStart, by: scanStep)
+            .map { ($0, energy(at: $0)) }
+            .sorted { $0.1 > $1.1 }
+
+        for candidate in energyCandidates {
+            guard starts.count < 5 else { break }
+            if starts.allSatisfy({ abs($0 - candidate.0) >= window / 2 }) {
+                starts.append(candidate.0)
+            }
+        }
+
+        var regions = starts.map { start in
+            TempoRegion(range: start..<(start + window), weight: 1)
+        }
+        regions.append(TempoRegion(range: envelope.indices, weight: 0.45))
+        return regions
+    }
+
+    nonisolated private static func normalizedAutocorrelation(
+        _ values: [Float],
+        minLag: Int,
+        maxLag: Int
+    ) -> [Float] {
+        var result = [Float](repeating: 0, count: maxLag + 1)
+        guard values.count > maxLag else { return result }
+
+        values.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return }
+            for lag in minLag...maxLag {
+                let count = values.count - lag
+                var correlation: Float = 0
+                var leftEnergy: Float = 0
+                var rightEnergy: Float = 0
+                vDSP_dotpr(base, 1, base + lag, 1, &correlation, vDSP_Length(count))
+                vDSP_dotpr(base, 1, base, 1, &leftEnergy, vDSP_Length(count))
+                vDSP_dotpr(base + lag, 1, base + lag, 1, &rightEnergy, vDSP_Length(count))
+                let denominator = sqrt(leftEnergy * rightEnergy)
+                if denominator > 0 { result[lag] = correlation / denominator }
+            }
+        }
+        return result
     }
 
     // MARK: - Internals
