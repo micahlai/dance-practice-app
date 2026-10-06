@@ -77,7 +77,9 @@ final class AppState {
     private(set) var countInTargetTime: Double?
     @ObservationIgnored private var countOffTask: Task<Void, Never>?
     @ObservationIgnored private let countOffPlayer = CountOffPlayer()
-    @ObservationIgnored private var lastGuideClickTime: Double?
+    @ObservationIgnored private var scheduledGuideTickIndex: Int?
+    @ObservationIgnored private var scheduledGuideMode: BeatClickMode = .off
+    @ObservationIgnored private var scheduledGuideRate: Double?
 
     func load(_ document: VideoDocument, restored: StoredPracticeState? = nil) {
         cancelCountOff()
@@ -87,7 +89,7 @@ final class AppState {
         countOffEnabled = restored?.countOffEnabled ?? false
         countInMusicEnabled = restored?.countInMusicEnabled ?? false
         beatClickMode = restored?.beatClickMode ?? .off
-        lastGuideClickTime = nil
+        clearGuideClickSchedule()
         beats.reset()
         beats.grid = restored?.grid
         beats.detectedBPM = restored?.detectedBPM
@@ -111,7 +113,7 @@ final class AppState {
         }
         if playback.isPlaying {
             playback.pause()
-            lastGuideClickTime = nil
+            clearGuideClickSchedule()
             return
         }
         if countOffEnabled, let grid = beats.grid {
@@ -127,7 +129,7 @@ final class AppState {
     /// "1 2 3 4 5"), at least 3 counts, always starting on 5 or 1, spaced
     /// one beat at the current practice rate so playback lands on the beat.
     private func startCountOff(grid: BeatGrid) {
-        lastGuideClickTime = nil
+        clearGuideClickSchedule()
         var startTime = grid.nearestBeatTime(to: playback.currentTime)
         if playback.duration > 0 {
             startTime = min(max(startTime, 0), playback.duration)
@@ -140,40 +142,64 @@ final class AppState {
         let leadTime = startTime - Double(sequence.count) * grid.beatInterval
         let musicCountIn = countInMusicEnabled && leadTime >= 0
 
-        if musicCountIn {
-            countInTargetTime = startTime
-            playback.seek(to: leadTime)
-            playback.play()
-        } else {
-            // Ticks-only: seek to the "1" and prime the video (paused) so the
-            // final play() at the end of the count starts instantly and lands
-            // on the beat, not a fraction late.
-            playback.prerollForStart(at: startTime)
-        }
-        countOffPlayer.playTicks(counts: sequence, interval: interval)
+        let preparedStartTime = musicCountIn ? leadTime : startTime
+        countInTargetTime = musicCountIn ? startTime : nil
+
         countOffTask = Task { [weak self] in
-            // Absolute deadlines from a fixed origin — no per-count drift, so
-            // playback starts exactly `sequence.count` beats after tick one.
+            guard let self else { return }
+            let prepared = await self.playback.prepareForScheduledStart(at: preparedStartTime)
+            guard prepared, !Task.isCancelled else {
+                if !Task.isCancelled {
+                    self.countOffTask = nil
+                    self.countInTargetTime = nil
+                    self.playback.play()
+                }
+                return
+            }
+
+            let landingCount = self.beatClickMode == .off ? nil : grid.count(at: startTime)
+            guard let audioOrigin = self.countOffPlayer.scheduleCountOff(
+                counts: sequence,
+                interval: interval,
+                landingCount: landingCount
+            ) else {
+                self.countOffTask = nil
+                self.countInTargetTime = nil
+                self.playback.play()
+                return
+            }
+
+            let videoStartHostTime = musicCountIn
+                ? audioOrigin
+                : audioOrigin + AVAudioTime.hostTime(
+                    forSeconds: interval * Double(sequence.count)
+                )
+            self.playback.playPrepared(at: preparedStartTime, hostTime: videoStartHostTime)
+
+            // Visual counts use the same absolute origin as the audio. They
+            // may render a frame late, but can never move the audio clock.
             let clock = ContinuousClock()
-            let origin = clock.now
+            let visualOrigin = clock.now + .seconds(CountOffPlayer.seconds(until: audioOrigin))
             for (i, count) in sequence.enumerated() {
                 guard !Task.isCancelled else { return }
-                self?.countOffLabel = String(count)
                 try? await clock.sleep(
-                    until: origin + .seconds(interval * Double(i + 1)),
+                    until: visualOrigin + .seconds(interval * Double(i)),
                     tolerance: .milliseconds(2)
                 )
+                guard !Task.isCancelled else { return }
+                self.countOffLabel = String(count)
             }
-            guard !Task.isCancelled, let self else { return }
+            try? await clock.sleep(
+                until: visualOrigin + .seconds(interval * Double(sequence.count)),
+                tolerance: .milliseconds(2)
+            )
+            guard !Task.isCancelled else { return }
             self.countOffLabel = nil
             self.countOffTask = nil
-            if musicCountIn {
-                // Music has caught up to the target; the wheel resumes
-                // following the (already playing) transport.
-                self.countInTargetTime = nil
-            } else {
-                self.playback.play()
-            }
+            self.countInTargetTime = nil
+            self.scheduledGuideTickIndex = nil
+            self.scheduledGuideMode = self.beatClickMode
+            self.scheduledGuideRate = self.playback.rate
         }
     }
 
@@ -192,12 +218,16 @@ final class AppState {
     }
 
     private func cancelCountOff() {
+        let wasCountingOff = countOffTask != nil
         countOffTask?.cancel()
         countOffTask = nil
         countOffLabel = nil
         countOffPlayer.stop()
-        if countInTargetTime != nil {
-            countInTargetTime = nil
+        countInTargetTime = nil
+        scheduledGuideTickIndex = nil
+        scheduledGuideMode = .off
+        scheduledGuideRate = nil
+        if wasCountingOff {
             playback.pause()
         }
     }
@@ -206,7 +236,6 @@ final class AppState {
 
     func beginScrub() {
         cancelCountOff()
-        lastGuideClickTime = nil
         playback.beginScrub()
         if scrubAudioEnabled {
             scrubAudio.begin(at: playback.currentTime)
@@ -257,7 +286,7 @@ final class AppState {
         transform(&grid)
         grid.bpm = min(max(grid.bpm, 20), 300)
         beats.grid = grid
-        lastGuideClickTime = nil
+        clearGuideClickSchedule()
         saveState()
     }
 
@@ -265,8 +294,20 @@ final class AppState {
     /// states so one compact transport button controls the full feature.
     func cycleBeatClickMode() {
         beatClickMode = beatClickMode.next
-        lastGuideClickTime = nil
+        clearGuideClickSchedule()
         saveState()
+    }
+
+    /// Apply practice-speed changes through AppState so any clicks already
+    /// queued at the old rate are replaced before they can sound off-beat.
+    func setPlaybackRate(_ rate: Double) {
+        guard abs(playback.rate - rate) > 0.0001 else { return }
+        if countOffTask != nil {
+            cancelCountOff()
+        } else {
+            clearGuideClickSchedule()
+        }
+        playback.setRate(rate)
     }
 
     // MARK: - Markers & A/B loops
@@ -365,49 +406,56 @@ final class AppState {
               countOffTask == nil,
               let grid = beats.grid,
               grid.bpm > 0 else {
-            lastGuideClickTime = nil
             return
         }
 
         let includesHalfCounts = beatClickMode == .beatsAndHalf
         let interval = includesHalfCounts ? grid.beatInterval / 2 : grid.beatInterval
 
-        guard let previousTime = lastGuideClickTime else {
-            lastGuideClickTime = time
-            // Count-offs finish exactly on a beat. Let the first playback
-            // update voice that landing instead of waiting a full beat.
-            let nearestIndex = ((time - grid.firstBeatTime) / interval).rounded()
-            let nearestTime = grid.firstBeatTime + nearestIndex * interval
-            if abs(time - nearestTime) <= 0.06 {
-                playGuideClick(index: Int(nearestIndex), includesHalfCounts: includesHalfCounts)
-            }
-            return
+        if scheduledGuideMode != beatClickMode
+            || abs((scheduledGuideRate ?? playback.rate) - playback.rate) > 0.0001 {
+            clearGuideClickSchedule()
         }
-        lastGuideClickTime = time
 
-        // A backwards move is a seek/loop wrap, and a large jump is a seek or
-        // app wake-up. Re-anchor silently so arbitrary navigation never clicks.
-        let elapsed = time - previousTime
-        guard elapsed >= 0, elapsed <= max(0.25, interval * 1.5) else { return }
+        let nextIndex = Int(floor((time - grid.firstBeatTime) / interval)) + 1
+        guard scheduledGuideTickIndex != nextIndex else { return }
+        let tickTime = grid.firstBeatTime + Double(nextIndex) * interval
+        guard playback.duration <= 0 || tickTime <= playback.duration else { return }
 
-        let previousIndex = Int(floor((previousTime - grid.firstBeatTime) / interval))
-        let currentIndex = Int(floor((time - grid.firstBeatTime) / interval))
-        guard currentIndex > previousIndex else { return }
-        playGuideClick(index: currentIndex, includesHalfCounts: includesHalfCounts)
+        let secondsUntilTick = max(0, (tickTime - time) / playback.rate)
+        scheduleGuideClick(
+            index: nextIndex,
+            includesHalfCounts: includesHalfCounts,
+            at: CountOffPlayer.hostTime(after: secondsUntilTick)
+        )
+        scheduledGuideTickIndex = nextIndex
+        scheduledGuideMode = beatClickMode
+        scheduledGuideRate = playback.rate
     }
 
-    private func playGuideClick(index: Int, includesHalfCounts: Bool) {
+    private func scheduleGuideClick(index: Int, includesHalfCounts: Bool, at hostTime: UInt64) {
         let halfBeatIndex = includesHalfCounts ? index : index * 2
         let normalizedHalf = ((halfBeatIndex % 16) + 16) % 16
         let isHalfCount = normalizedHalf % 2 == 1
         let beatCount = normalizedHalf / 2 + 1
-        countOffPlayer.playGuideClick(
+        countOffPlayer.scheduleGuideClick(
             accent: !isHalfCount && (beatCount == 1 || beatCount == 5),
-            isHalfCount: isHalfCount
+            isHalfCount: isHalfCount,
+            at: hostTime
         )
     }
 
+    private func clearGuideClickSchedule() {
+        scheduledGuideTickIndex = nil
+        scheduledGuideMode = .off
+        scheduledGuideRate = nil
+        if countOffTask == nil {
+            countOffPlayer.stop()
+        }
+    }
+
     private func loopBackToStart(_ start: Double) {
+        clearGuideClickSchedule()
         // With count-off on, count back into the loop each pass (respects the
         // music-count-in variant too); otherwise just seek and keep playing.
         if countOffEnabled, let grid = beats.grid {

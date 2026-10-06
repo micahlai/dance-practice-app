@@ -48,24 +48,7 @@ struct PracticeView: View {
             let compactLayout = geo.size.width < 900
 
             if compactLayout {
-                ZStack(alignment: .leading) {
-                    centerColumn
-
-                    if compactMarkerPresented {
-                        MarkerRail {
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                compactMarkerPresented = false
-                            }
-                        }
-                        .transition(.move(edge: .leading))
-                    } else {
-                        CollapsedMarkerRail {
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                compactMarkerPresented = true
-                            }
-                        }
-                    }
-                }
+                compactColumn
             } else {
                 HStack(spacing: 0) {
                     if markerRailCollapsed {
@@ -119,51 +102,96 @@ struct PracticeView: View {
     /// fill; the wheel/transport keep fixed heights.
     private var centerColumn: some View {
         VStack(spacing: 0) {
-            ZoomableVideoView(
-                player: app.playback.player,
-                interpolationActive: app.frameInterpolationActive
-            )
-                .overlay { VideoOverlays() }
-                // The whole right edge of the video is the speed-gesture grab
-                // zone (widened from the 56 pt rail) — and the only one in
-                // portrait, where the rail is gone.
-                .overlay(alignment: .trailing) {
-                    SpeedGestureCatcher()
-                        .frame(width: 44)
-                }
-                // Reset-to-100% sits at the bottom-right, above the wheel.
-                .overlay(alignment: .bottomTrailing) {
-                    SpeedResetButton()
-                }
-                .overlay(alignment: .topLeading) {
-                    Button {
-                        app.closeDocument()
-                    } label: {
-                        Image(systemName: "house.fill")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(.black.opacity(0.58), in: Circle())
-                            .overlay(Circle().strokeBorder(.white.opacity(0.18)))
+            videoStage
+            jogControls
+        }
+    }
+
+    /// On narrow screens the marker rail is constrained to the stage above
+    /// the jog controls, so it never covers the wheel or transport buttons.
+    private var compactColumn: some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .leading) {
+                videoSurface
+
+                if compactMarkerPresented {
+                    MarkerRail {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            compactMarkerPresented = false
+                        }
                     }
-                    .padding(16)
-                    .accessibilityLabel("Return home")
-                }
-                .overlay(alignment: .topTrailing) {
-                    Button {
-                        withAnimation { showOnboarding = true }
-                    } label: {
-                        Image(systemName: "questionmark")
-                            .font(.headline.weight(.bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(.black.opacity(0.58), in: Circle())
-                            .overlay(Circle().strokeBorder(.white.opacity(0.18)))
+                    .padding(.top, 60)
+                    .transition(.move(edge: .leading))
+                } else {
+                    CollapsedMarkerRail {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            compactMarkerPresented = true
+                        }
                     }
-                    .padding(16)
-                    .accessibilityLabel("Show control guide")
+                    .padding(.top, 60)
                 }
+            }
             BeatControlsRow()
+            jogControls
+        }
+    }
+
+    private var videoStage: some View {
+        VStack(spacing: 0) {
+            videoSurface
+            BeatControlsRow()
+        }
+    }
+
+    private var videoSurface: some View {
+        ZoomableVideoView(
+            player: app.playback.player,
+            interpolationActive: app.frameInterpolationActive
+        )
+            .overlay { VideoOverlays() }
+            // The whole right edge of the video is the speed-gesture grab
+            // zone (widened from the 56 pt rail) — and the only one in
+            // portrait, where the rail is gone.
+            .overlay(alignment: .trailing) {
+                SpeedGestureCatcher()
+                    .frame(width: 44)
+            }
+            // Reset-to-100% sits at the bottom-right, above the wheel.
+            .overlay(alignment: .bottomTrailing) {
+                SpeedResetButton()
+            }
+            .overlay(alignment: .topLeading) {
+                Button {
+                    app.closeDocument()
+                } label: {
+                    Image(systemName: "house.fill")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(.black.opacity(0.58), in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.18)))
+                }
+                .padding(16)
+                .accessibilityLabel("Return home")
+            }
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    withAnimation { showOnboarding = true }
+                } label: {
+                    Image(systemName: "questionmark")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(.black.opacity(0.58), in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.18)))
+                }
+                .padding(16)
+                .accessibilityLabel("Show control guide")
+            }
+    }
+
+    private var jogControls: some View {
+        VStack(spacing: 0) {
             WheelHandle(
                 height: $wheelHeight,
                 collapsed: $wheelCollapsed,
@@ -256,7 +284,7 @@ struct TransportBar: View {
 
             if app.playback.rate < 1 {
                 Button {
-                    app.playback.setRate(1.0)
+                    app.setPlaybackRate(1.0)
                     app.saveState()
                 } label: {
                     Text("\(Int((app.playback.rate * 100).rounded()))%")

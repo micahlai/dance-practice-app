@@ -1,9 +1,12 @@
 import AVFoundation
+import Darwin
 
-/// Plays the audible "5, 6, 7, 8" count-off. Each tick is a short sine
-/// click padded with silence to exactly one beat interval, so scheduling
-/// the buffers back-to-back gives sample-accurate spacing at any rate.
+/// Owns the single audio clock used by both the count-off and live beat
+/// guide. Scheduling every click against host time keeps their phase intact
+/// across the handoff into playback.
 final class CountOffPlayer {
+    static let schedulingLeadTime = 0.12
+
     private let engine = AVAudioEngine()
     private let node = AVAudioPlayerNode()
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
@@ -13,19 +16,28 @@ final class CountOffPlayer {
         engine.connect(node, to: engine.mainMixerNode, format: format)
     }
 
-    /// One tick per count; counts landing on 1 or 5 are accented.
-    func playTicks(counts: [Int], interval: Double) {
-        guard !counts.isEmpty, interval > 0.05 else { return }
-        if !engine.isRunning {
-            try? engine.start()
-        }
+    /// Schedule the count-off and, when requested, the live guide's landing
+    /// beat on one clock. Returns the host time of the first count.
+    func scheduleCountOff(
+        counts: [Int],
+        interval: Double,
+        landingCount: Int?
+    ) -> UInt64? {
+        guard !counts.isEmpty, interval > 0.05, startEngineIfNeeded() else { return nil }
         node.stop()
-        for count in counts {
-            if let buffer = makePaddedClick(interval: interval, accent: count == 1 || count == 5) {
-                node.scheduleBuffer(buffer)
+        let origin = mach_absolute_time()
+            + AVAudioTime.hostTime(forSeconds: Self.schedulingLeadTime)
+
+        for (index, count) in counts.enumerated() {
+            if let buffer = makeClick(accent: count == 1 || count == 5) {
+                schedule(buffer, at: hostTime(origin: origin, interval: interval, index: index))
             }
         }
+        if let landingCount, let buffer = makeClick(accent: landingCount == 1 || landingCount == 5) {
+            schedule(buffer, at: hostTime(origin: origin, interval: interval, index: counts.count))
+        }
         node.play()
+        return origin
     }
 
     func stop() {
@@ -33,31 +45,55 @@ final class CountOffPlayer {
         engine.pause()
     }
 
-    /// Play one short guide click while the video is running. Half-count
-    /// clicks are quieter and lower so the main beat remains easy to feel.
-    func playGuideClick(accent: Bool, isHalfCount: Bool) {
-        if !engine.isRunning {
-            try? engine.start()
-        }
-        node.stop()
-        guard let buffer = makePaddedClick(
-            interval: 0.05,
+    /// Queue a live guide click at an exact host time. The node is deliberately
+    /// not stopped here: queued beats remain sample-aligned with one another.
+    func scheduleGuideClick(accent: Bool, isHalfCount: Bool, at hostTime: UInt64) {
+        guard startEngineIfNeeded(),
+              let buffer = makeClick(
             accent: accent,
             volume: isHalfCount ? 0.42 : 0.72,
             frequency: isHalfCount ? 850 : nil
         ) else { return }
-        node.scheduleBuffer(buffer)
-        node.play()
+        schedule(buffer, at: hostTime)
+        if !node.isPlaying { node.play() }
     }
 
-    private func makePaddedClick(
-        interval: Double,
+    static func hostTime(after seconds: Double) -> UInt64 {
+        mach_absolute_time() + AVAudioTime.hostTime(forSeconds: max(0, seconds))
+    }
+
+    static func seconds(until hostTime: UInt64) -> Double {
+        let now = mach_absolute_time()
+        guard hostTime > now else { return 0 }
+        return AVAudioTime.seconds(forHostTime: hostTime - now)
+    }
+
+    private func startEngineIfNeeded() -> Bool {
+        if !engine.isRunning {
+            do {
+                try engine.start()
+            } catch {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func schedule(_ buffer: AVAudioPCMBuffer, at hostTime: UInt64) {
+        node.scheduleBuffer(buffer, at: AVAudioTime(hostTime: hostTime), options: [])
+    }
+
+    private func hostTime(origin: UInt64, interval: Double, index: Int) -> UInt64 {
+        origin + AVAudioTime.hostTime(forSeconds: interval * Double(index))
+    }
+
+    private func makeClick(
         accent: Bool,
         volume: Double = 0.8,
         frequency frequencyOverride: Double? = nil
     ) -> AVAudioPCMBuffer? {
         let sampleRate = format.sampleRate
-        let totalFrames = AVAudioFrameCount(interval * sampleRate)
+        let totalFrames = AVAudioFrameCount(0.05 * sampleRate)
         guard totalFrames > 0,
               let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: totalFrames),
               let data = buffer.floatChannelData?[0] else { return nil }

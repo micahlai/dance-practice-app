@@ -77,7 +77,7 @@ struct SpeedResetButton: View {
     var body: some View {
         if app.playback.rate < 1 {
             Button {
-                app.playback.setRate(1.0)
+                app.setPlaybackRate(1.0)
                 app.saveState()
             } label: {
                 HStack(spacing: 6) {
@@ -121,7 +121,7 @@ struct SpeedGestureCatcher: UIViewRepresentable {
             app.speedGestureActive = true
             app.speedGestureIncrementPercent = 1
         }
-        view.onChange = { app.playback.setRate($0) }
+        view.onChange = { app.setPlaybackRate($0) }
         view.onIncrementChange = { app.speedGestureIncrementPercent = $0 }
         view.onMove = { app.speedGesturePoint = $0 }
         view.onEnd = {
