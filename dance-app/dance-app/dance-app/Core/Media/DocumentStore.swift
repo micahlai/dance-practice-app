@@ -34,6 +34,7 @@ struct StoredPracticeState: Codable {
     var grid: BeatGrid?
     var detectedBPM: Double?
     var detectionConfidence: Double?
+    var tempoAnalysisVersion: Int? = nil
     var playbackRate: Double?
     var countOffEnabled: Bool?
     var countInMusicEnabled: Bool?

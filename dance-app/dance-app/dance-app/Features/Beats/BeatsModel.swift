@@ -7,6 +7,7 @@ final class BeatsModel {
     var grid: BeatGrid?
     var detectedBPM: Double?
     var detectionConfidence: Double?
+    var analysisVersion: Int?
     var isAnalyzing = false
 
     func reset() {
@@ -14,6 +15,7 @@ final class BeatsModel {
         grid = nil
         detectedBPM = nil
         detectionConfidence = nil
+        analysisVersion = nil
         isAnalyzing = false
     }
 }

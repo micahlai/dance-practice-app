@@ -105,6 +105,7 @@ final class AppState {
         beats.grid = restored?.grid
         beats.detectedBPM = restored?.detectedBPM
         beats.detectionConfidence = restored?.detectionConfidence
+        beats.analysisVersion = restored?.tempoAnalysisVersion
         markers.reset()
         markers.markers = restored?.markers ?? []
         markers.loopA = restored?.loopA
@@ -533,6 +534,7 @@ final class AppState {
             grid: beats.grid,
             detectedBPM: beats.detectedBPM,
             detectionConfidence: beats.detectionConfidence,
+            tempoAnalysisVersion: beats.analysisVersion,
             playbackRate: playback.rate,
             countOffEnabled: countOffEnabled,
             countInMusicEnabled: countInMusicEnabled,
@@ -546,11 +548,12 @@ final class AppState {
     }
 
     private func analyze(_ document: VideoDocument) {
+        let currentTempoAnalysisVersion = 2
         guard let audioURL = document.audioURL else { return }
         beats.isAnalyzing = true
         let cacheURL = (try? MediaImporter.videosDirectory())?
             .appendingPathComponent("\(document.id.uuidString).waveform.json")
-        let needsTempo = beats.grid == nil
+        let needsTempo = beats.grid == nil || beats.analysisVersion != currentTempoAnalysisVersion
 
         Task { [weak self] in
             let waveform = try? await Task.detached(priority: .userInitiated) {
@@ -567,6 +570,7 @@ final class AppState {
             if let tempo {
                 self.beats.detectedBPM = tempo.bpm
                 self.beats.detectionConfidence = tempo.confidence
+                self.beats.analysisVersion = currentTempoAnalysisVersion
                 if self.beats.grid == nil {
                     self.beats.grid = BeatGrid(firstBeatTime: tempo.firstBeatTime, bpm: tempo.bpm)
                 }
