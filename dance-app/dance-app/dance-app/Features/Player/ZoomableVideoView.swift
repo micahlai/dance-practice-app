@@ -9,6 +9,7 @@ struct ZoomableVideoView: UIViewRepresentable {
     /// Frame-blending overlay (doubles apparent fps) — active only while
     /// scrubbing or playing slowed down.
     let interpolationActive: Bool
+    let onCenterTap: () -> Void
 
     func makeUIView(context: Context) -> ZoomScrollView {
         let view = ZoomScrollView()
@@ -16,6 +17,7 @@ struct ZoomableVideoView: UIViewRepresentable {
         view.videoView.playerLayer.player = player
         view.interpolationView.attach(to: player)
         view.interpolationView.isActive = interpolationActive
+        view.onCenterTap = onCenterTap
         return view
     }
 
@@ -23,6 +25,7 @@ struct ZoomableVideoView: UIViewRepresentable {
         uiView.videoView.playerLayer.player = player
         uiView.interpolationView.attach(to: player)
         uiView.interpolationView.isActive = interpolationActive
+        uiView.onCenterTap = onCenterTap
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -38,6 +41,7 @@ final class ZoomScrollView: UIScrollView {
     let videoView = PlayerLayerView()
     // Inside videoView so pinch zoom/pan carries the overlay along.
     let interpolationView = FrameInterpolationView()
+    var onCenterTap: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -53,6 +57,10 @@ final class ZoomScrollView: UIScrollView {
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(resetZoom))
         doubleTap.numberOfTapsRequired = 2
         addGestureRecognizer(doubleTap)
+
+        let centerTap = UITapGestureRecognizer(target: self, action: #selector(handleCenterTap(_:)))
+        centerTap.require(toFail: doubleTap)
+        addGestureRecognizer(centerTap)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -68,6 +76,13 @@ final class ZoomScrollView: UIScrollView {
 
     @objc private func resetZoom() {
         setZoomScale(1, animated: true)
+    }
+
+    @objc private func handleCenterTap(_ gesture: UITapGestureRecognizer) {
+        let point = gesture.location(in: self)
+        let centerRegion = bounds.insetBy(dx: bounds.width * 0.2, dy: bounds.height * 0.2)
+        guard centerRegion.contains(point) else { return }
+        onCenterTap?()
     }
 }
 

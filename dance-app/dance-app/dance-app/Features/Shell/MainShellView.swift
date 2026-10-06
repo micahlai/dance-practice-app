@@ -161,7 +161,8 @@ struct PracticeView: View {
     private var videoSurface: some View {
         ZoomableVideoView(
             player: app.playback.player,
-            interpolationActive: app.frameInterpolationActive
+            interpolationActive: app.frameInterpolationActive,
+            onCenterTap: { app.togglePlayPause() }
         )
             .overlay { VideoOverlays() }
             // The whole right edge of the video is the speed-gesture grab
