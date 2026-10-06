@@ -31,11 +31,20 @@ struct ImportView: View {
 
     var body: some View {
         VStack(spacing: 28) {
-            Image(systemName: "figure.dance")
-                .font(.system(size: 56))
-                .foregroundStyle(.tint)
-            Text("Load a video to practice")
-                .font(.title2.weight(.semibold))
+            VStack(spacing: 8) {
+                Image("ChoreoLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 132, height: 132)
+                    .accessibilityHidden(true)
+
+                Text("Choreo Jogger")
+                    .font(.largeTitle.weight(.bold))
+
+                Text("Load a video to practice")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
 
             HStack(spacing: 16) {
                 PhotosPicker(selection: $photoItem, matching: .videos) {
@@ -60,8 +69,15 @@ struct ImportView: View {
         .disabled(isImporting)
         .overlay {
             if isImporting {
-                ProgressView("Importing…")
-                    .padding(24)
+                VStack(spacing: 12) {
+                    Image("ChoreoLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 52, height: 52)
+                        .accessibilityHidden(true)
+                    ProgressView("Importing…")
+                }
+                    .padding(22)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
         }
