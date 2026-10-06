@@ -33,7 +33,29 @@ final class CountOffPlayer {
         engine.pause()
     }
 
-    private func makePaddedClick(interval: Double, accent: Bool) -> AVAudioPCMBuffer? {
+    /// Play one short guide click while the video is running. Half-count
+    /// clicks are quieter and lower so the main beat remains easy to feel.
+    func playGuideClick(accent: Bool, isHalfCount: Bool) {
+        if !engine.isRunning {
+            try? engine.start()
+        }
+        node.stop()
+        guard let buffer = makePaddedClick(
+            interval: 0.05,
+            accent: accent,
+            volume: isHalfCount ? 0.42 : 0.72,
+            frequency: isHalfCount ? 850 : nil
+        ) else { return }
+        node.scheduleBuffer(buffer)
+        node.play()
+    }
+
+    private func makePaddedClick(
+        interval: Double,
+        accent: Bool,
+        volume: Double = 0.8,
+        frequency frequencyOverride: Double? = nil
+    ) -> AVAudioPCMBuffer? {
         let sampleRate = format.sampleRate
         let totalFrames = AVAudioFrameCount(interval * sampleRate)
         guard totalFrames > 0,
@@ -42,12 +64,12 @@ final class CountOffPlayer {
         buffer.frameLength = totalFrames
 
         let clickFrames = min(Int(0.04 * sampleRate), Int(totalFrames))
-        let frequency = accent ? 1500.0 : 1000.0
+        let frequency = frequencyOverride ?? (accent ? 1500.0 : 1000.0)
         for i in 0..<Int(totalFrames) {
             if i < clickFrames {
                 let t = Double(i) / sampleRate
                 let envelope = exp(-t / 0.012)
-                data[i] = Float(0.8 * envelope * sin(2 * .pi * frequency * t))
+                data[i] = Float(volume * envelope * sin(2 * .pi * frequency * t))
             } else {
                 data[i] = 0
             }

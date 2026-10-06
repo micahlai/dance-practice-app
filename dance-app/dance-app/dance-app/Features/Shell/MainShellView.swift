@@ -285,6 +285,8 @@ struct TransportBar: View {
                 .disabled(!app.countOffEnabled)
                 .opacity(app.countOffEnabled ? 1 : 0.4)
 
+            beatClickButton
+
             Button {
                 app.showCalibrationSheet = true
             } label: {
@@ -329,6 +331,30 @@ struct TransportBar: View {
                 .frame(width: 36)
         }
         .accessibilityLabel(hint)
+    }
+
+    private var beatClickButton: some View {
+        Button {
+            app.cycleBeatClickMode()
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.body)
+                    .foregroundStyle(app.beatClickMode == .off ? .secondary : Color.accentColor)
+                    .frame(width: 36, height: 36)
+
+                if app.beatClickMode != .off {
+                    Text(app.beatClickMode == .beats ? "1" : "&")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(width: 15, height: 15)
+                        .background(Color.accentColor, in: Circle())
+                }
+            }
+        }
+        .accessibilityLabel("Beat clicks")
+        .accessibilityValue(app.beatClickMode.accessibilityValue)
+        .accessibilityHint("Tap to cycle between every beat, beat and half count, and off")
     }
 
     private func timeString(_ seconds: Double) -> String {

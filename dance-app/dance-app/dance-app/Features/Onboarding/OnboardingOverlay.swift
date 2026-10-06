@@ -142,37 +142,43 @@ private struct OnboardingStep {
         ),
         OnboardingStep(
             icon: "metronome",
-            location: "Bottom-right · 1 of 6",
+            location: "Bottom-right · 1 of 7",
             title: "Count-off",
             detail: "The metronome button adds a counted lead-in before playback so you can get ready and enter on the beat."
         ),
         OnboardingStep(
             icon: "music.note",
-            location: "Bottom-right · 2 of 6",
+            location: "Bottom-right · 2 of 7",
             title: "Music count-in",
             detail: "The music-note button uses the video's audio during the lead-in. It becomes available after Count-off is turned on."
         ),
         OnboardingStep(
+            icon: "waveform.path.ecg",
+            location: "Bottom-right · 3 of 7",
+            title: "Beat clicks",
+            detail: "Tap once for one click on every beat. Tap again to add a click on each half count (&). Tap a third time to turn the clicks off. The 1 or & badge shows the current mode."
+        ),
+        OnboardingStep(
             icon: "headphones",
-            location: "Bottom-right · 3 of 6",
+            location: "Bottom-right · 4 of 7",
             title: "Audio calibration",
             detail: "The headphones button opens latency calibration. Use it with Bluetooth headphones or speakers when beat markers look slightly ahead of the sound."
         ),
         OnboardingStep(
             icon: "slowmo",
-            location: "Bottom-right · 4 of 6",
+            location: "Bottom-right · 5 of 7",
             title: "Smooth motion",
             detail: "The slow-motion button blends adjacent frames while scrubbing or playing below full speed for smoother movement."
         ),
         OnboardingStep(
             icon: "waveform",
-            location: "Bottom-right · 5 of 6",
+            location: "Bottom-right · 6 of 7",
             title: "Waveform",
             detail: "The waveform button shows or hides the audio waveform behind the scrub wheel."
         ),
         OnboardingStep(
             icon: "speaker.wave.2.fill",
-            location: "Bottom-right · 6 of 6",
+            location: "Bottom-right · 7 of 7",
             title: "Scrub audio",
             detail: "The speaker button turns sound while scrubbing on or off. Use silent scrubbing when you only want visual positioning."
         )

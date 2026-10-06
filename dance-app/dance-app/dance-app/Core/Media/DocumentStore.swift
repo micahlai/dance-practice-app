@@ -1,5 +1,28 @@
 import Foundation
 
+/// Audible guide played during normal video playback.
+enum BeatClickMode: Int, Codable, CaseIterable {
+    case off
+    case beats
+    case beatsAndHalf
+
+    var next: Self {
+        switch self {
+        case .off: .beats
+        case .beats: .beatsAndHalf
+        case .beatsAndHalf: .off
+        }
+    }
+
+    var accessibilityValue: String {
+        switch self {
+        case .off: "Off"
+        case .beats: "One click per beat"
+        case .beatsAndHalf: "Clicks on the beat and half count"
+        }
+    }
+}
+
 /// Sidecar JSON persisted next to each imported video (`<id>.state.json`).
 /// Stores filenames, not absolute URLs — the container path changes across
 /// app updates.
@@ -14,6 +37,7 @@ struct StoredPracticeState: Codable {
     var playbackRate: Double?
     var countOffEnabled: Bool?
     var countInMusicEnabled: Bool?
+    var beatClickMode: BeatClickMode? = nil
     // M5 — markers & A/B loop (optional so pre-M5 sidecars still decode).
     var markers: [Marker]? = nil
     var loopA: Double? = nil
