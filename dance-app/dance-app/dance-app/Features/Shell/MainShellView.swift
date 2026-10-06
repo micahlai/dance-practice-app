@@ -34,6 +34,7 @@ struct PracticeView: View {
     @State private var showOnboarding = false
     @State private var helpStepIndex = 0
     @State private var compactMarkerPresented = false
+    @State private var calibrationDetent: PresentationDetent = .large
 
     private let wheelRange: ClosedRange<Double> = 64...340
     private let collapsedWheelHeight = 40.0
@@ -90,7 +91,8 @@ struct PracticeView: View {
         .sheet(isPresented: $app.showCalibrationSheet) {
             CalibrationView()
                 .environment(app)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium, .large], selection: $calibrationDetent)
+                .presentationDragIndicator(.visible)
         }
         .alert("New audio output", isPresented: $app.showCalibrationPrompt) {
             Button("Calibrate") { app.showCalibrationSheet = true }
@@ -102,6 +104,11 @@ struct PracticeView: View {
             if !hasSeenOnboarding {
                 helpStepIndex = 0
                 showOnboarding = true
+            }
+        }
+        .onChange(of: app.showCalibrationSheet) { _, isPresented in
+            if isPresented {
+                calibrationDetent = .large
             }
         }
     }
