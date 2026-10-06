@@ -290,7 +290,7 @@ struct TransportBar: View {
                     .padding(.horizontal, 20)
             }
         }
-        .frame(height: 56)
+        .frame(height: 64)
         .background(.ultraThinMaterial)
     }
 
@@ -299,9 +299,12 @@ struct TransportBar: View {
             Button {
                 app.togglePlayPause()
             } label: {
-                Image(systemName: app.playback.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title2)
-                    .frame(width: 44)
+                transportIcon(
+                    app.playback.isPlaying ? "pause.fill" : "play.fill",
+                    label: app.playback.isPlaying ? "Pause" : "Play",
+                    isOn: true,
+                    prominent: true
+                )
             }
             .id(HelpTarget.playback)
             .helpTarget(.playback)
@@ -353,10 +356,11 @@ struct TransportBar: View {
             Button {
                 app.showCalibrationSheet = true
             } label: {
-                Image(systemName: "headphones")
-                    .font(.body)
-                    .foregroundStyle(app.latencyOffset != 0 ? Color.accentColor : .secondary)
-                    .frame(width: 36)
+                transportIcon(
+                    "headphones",
+                    label: "Sync",
+                    isOn: app.latencyOffset != 0
+                )
             }
             .accessibilityLabel("Calibrate beat latency")
             .id(HelpTarget.calibration)
@@ -386,7 +390,7 @@ struct TransportBar: View {
                 .id(HelpTarget.scrubAudio)
                 .helpTarget(.scrubAudio)
         }
-        .frame(minHeight: 56)
+        .frame(minHeight: 64)
     }
 
     private func toggle(
@@ -396,10 +400,7 @@ struct TransportBar: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.body)
-                .foregroundStyle(isOn ? Color.accentColor : .secondary)
-                .frame(width: 36)
+            transportIcon(systemImage, label: shortLabel(for: hint), isOn: isOn)
         }
         .accessibilityLabel(hint)
     }
@@ -408,20 +409,26 @@ struct TransportBar: View {
         Button {
             app.cycleBeatClickMode()
         } label: {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: "waveform.path.ecg")
-                    .font(.body)
-                    .foregroundStyle(app.beatClickMode == .off ? .secondary : Color.accentColor)
-                    .frame(width: 36, height: 36)
+            VStack(spacing: 2) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.body)
+                        .foregroundStyle(app.beatClickMode == .off ? .secondary : Color.accentColor)
+                        .frame(width: 40, height: 25)
 
-                if app.beatClickMode != .off {
-                    Text(app.beatClickMode == .beats ? "1" : "&")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(width: 15, height: 15)
-                        .background(Color.accentColor, in: Circle())
+                    if app.beatClickMode != .off {
+                        Text(app.beatClickMode == .beats ? "1" : "&")
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .frame(width: 14, height: 14)
+                            .background(Color.accentColor, in: Circle())
+                    }
                 }
+                Text("Clicks")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
             }
+            .frame(width: 44, height: 48)
         }
         .accessibilityLabel("Beat clicks")
         .accessibilityValue(app.beatClickMode.accessibilityValue)
@@ -432,6 +439,35 @@ struct TransportBar: View {
         guard seconds.isFinite, seconds >= 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    private func transportIcon(
+        _ systemImage: String,
+        label: String,
+        isOn: Bool,
+        prominent: Bool = false
+    ) -> some View {
+        VStack(spacing: 2) {
+            Image(systemName: systemImage)
+                .font(prominent ? .title3 : .body)
+                .frame(height: 25)
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+                .lineLimit(1)
+        }
+        .foregroundStyle(isOn ? Color.accentColor : .secondary)
+        .frame(width: prominent ? 46 : 44, height: 48)
+    }
+
+    private func shortLabel(for hint: String) -> String {
+        switch hint {
+        case "Count-off": "Count"
+        case "Play music during count-off": "Count-in"
+        case "Smooth motion while scrubbing or slowed (frame blending)": "Smooth"
+        case "Waveform": "Wave"
+        case "Scrub audio": "Scrub"
+        default: hint
+        }
     }
 
     private var transportTargets: Set<HelpTarget> {
