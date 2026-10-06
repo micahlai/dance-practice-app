@@ -73,8 +73,6 @@ final class AppState {
     var speedGestureIncrementPercent = 1
     /// Finger location (window coords) while the speed gesture is active.
     var speedGesturePoint: CGPoint?
-    /// Touch-down location used to draw the 1%/5% gesture boundary.
-    var speedGestureStartPoint: CGPoint?
     var countOffEnabled = false
     /// Count-off variant: music plays during the countdown, starting N
     /// counts before the playhead and catching up to it.

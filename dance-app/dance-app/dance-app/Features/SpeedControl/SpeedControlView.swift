@@ -120,7 +120,7 @@ struct SpeedGestureCatcher: UIViewRepresentable {
         view.onBegin = { point in
             app.speedGestureActive = true
             app.speedGestureIncrementPercent = 1
-            app.speedGestureStartPoint = point
+            app.speedGesturePoint = point
         }
         view.onChange = { app.setPlaybackRate($0) }
         view.onIncrementChange = { app.speedGestureIncrementPercent = $0 }
@@ -129,7 +129,6 @@ struct SpeedGestureCatcher: UIViewRepresentable {
             app.speedGestureActive = false
             app.speedGestureIncrementPercent = 1
             app.speedGesturePoint = nil
-            app.speedGestureStartPoint = nil
             app.saveState()
         }
     }

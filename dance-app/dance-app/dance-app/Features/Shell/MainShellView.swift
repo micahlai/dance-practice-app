@@ -170,7 +170,7 @@ struct PracticeView: View {
             // portrait, where the rail is gone.
             .overlay(alignment: .trailing) {
                 SpeedGestureCatcher()
-                    .frame(width: 44)
+                    .frame(width: 72)
                     .helpTarget(.speed)
             }
             // Reset-to-100% sits at the bottom-right, above the wheel.
@@ -224,8 +224,7 @@ struct PracticeView: View {
     }
 }
 
-/// Transient HUDs over the video: count-off numbers and the speed readout
-/// while the right-edge gesture is active.
+/// Video HUDs: count-off numbers and the persistent speed affordance.
 struct VideoOverlays: View {
     @Environment(AppState.self) private var app
 
@@ -238,8 +237,8 @@ struct VideoOverlays: View {
                     .shadow(color: .black.opacity(0.6), radius: 12)
                     .transition(.scale.combined(with: .opacity))
                     .id(label)
-            } else if app.speedGestureActive {
-                SpeedGestureHUD()
+            } else {
+                SpeedGestureIndicator()
             }
         }
         .animation(.easeOut(duration: 0.12), value: app.countOffLabel)
@@ -247,78 +246,103 @@ struct VideoOverlays: View {
     }
 }
 
-private struct SpeedGestureHUD: View {
+private struct SpeedGestureIndicator: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
         GeometryReader { geometry in
             let globalFrame = geometry.frame(in: .global)
-            let current = localPoint(app.speedGesturePoint, in: globalFrame)
-            let start = localPoint(app.speedGestureStartPoint, in: globalFrame)
-            let boundary = min(max(start.x - 20, 112), geometry.size.width - 50)
-            let guideTop = min(max(current.y - 82, 8), max(8, geometry.size.height - 118))
-            let rightEdge = geometry.size.width - 8
-            let coarseWidth = max(boundary - 20, 80)
-            let fineWidth = max(rightEdge - boundary, 44)
+            let restingPoint = CGPoint(x: geometry.size.width - 28, y: geometry.size.height / 2)
+            let touchPoint = localPoint(app.speedGesturePoint, in: globalFrame) ?? restingPoint
+            let current = CGPoint(
+                x: min(max(touchPoint.x, 18), geometry.size.width - 18),
+                y: min(max(touchPoint.y, 18), geometry.size.height - 18)
+            )
 
             ZStack(alignment: .topLeading) {
-                incrementRegion(
-                    label: "5% steps",
-                    active: app.speedGestureIncrementPercent == 5
-                )
-                .frame(width: coarseWidth, height: 110)
-                .position(x: boundary - coarseWidth / 2, y: guideTop + 55)
-
-                incrementRegion(
-                    label: "1% steps",
-                    active: app.speedGestureIncrementPercent == 1
-                )
-                .frame(width: fineWidth, height: 110)
-                .position(x: boundary + fineWidth / 2, y: guideTop + 55)
+                if !app.speedGestureActive {
+                    Text("Change\nspeed")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .multilineTextAlignment(.trailing)
+                        .shadow(color: .black.opacity(0.8), radius: 3)
+                        .position(
+                            x: max(restingPoint.x - 47, 32),
+                            y: restingPoint.y
+                        )
+                        .transition(.opacity)
+                }
 
                 Circle()
                     .fill(.white)
-                    .frame(width: 18, height: 18)
+                    .frame(width: 20, height: 20)
                     .overlay(Circle().stroke(Color.accentColor, lineWidth: 5))
                     .shadow(color: .black.opacity(0.55), radius: 5)
-                    .position(
-                        x: min(max(current.x, 16), geometry.size.width - 16),
-                        y: min(max(current.y, 16), geometry.size.height - 16)
-                    )
+                    .position(app.speedGestureActive ? current : restingPoint)
+                    .animation(.spring(response: 0.22, dampingFraction: 0.78), value: app.speedGestureActive)
 
-                Text("\(Int((app.playback.rate * 100).rounded()))%")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.76), in: RoundedRectangle(cornerRadius: 10))
-                    .position(
-                        x: min(max(current.x - 58, 48), geometry.size.width - 48),
-                        y: min(max(current.y - 38, 28), geometry.size.height - 28)
-                    )
+                if app.speedGestureActive {
+                    Text("\(Int((app.playback.rate * 100).rounded()))%")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.76), in: RoundedRectangle(cornerRadius: 10))
+                        .position(
+                            x: min(max(current.x, 48), geometry.size.width - 48),
+                            y: min(max(current.y - 42, 28), geometry.size.height - 28)
+                        )
+
+                    precisionCue
+                        .position(
+                            x: cueX(for: current.x, width: geometry.size.width),
+                            y: min(max(current.y + 34, 22), geometry.size.height - 22)
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                }
             }
         }
     }
 
-    private func incrementRegion(label: String, active: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(active ? Color.accentColor.opacity(0.42) : Color.black.opacity(0.48))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(active ? Color.accentColor : Color.white.opacity(0.24), lineWidth: active ? 2 : 1)
+    @ViewBuilder
+    private var precisionCue: some View {
+        if app.speedGestureIncrementPercent == 1 {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.left")
+                Text("5%")
             }
-            .overlay(alignment: .topLeading) {
-                Text(label)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(active ? .white : .secondary)
-                    .padding(8)
+            .modifier(PrecisionCueStyle())
+        } else {
+            HStack(spacing: 5) {
+                Text("1%")
+                Image(systemName: "arrow.right")
             }
+            .modifier(PrecisionCueStyle())
+        }
     }
 
-    private func localPoint(_ point: CGPoint?, in frame: CGRect) -> CGPoint {
-        guard let point else { return CGPoint(x: frame.maxX - 24, y: frame.midY) }
+    private func cueX(for currentX: CGFloat, width: CGFloat) -> CGFloat {
+        let offset: CGFloat = app.speedGestureIncrementPercent == 1 ? -48 : 48
+        return min(max(currentX + offset, 34), width - 34)
+    }
+
+    private func localPoint(_ point: CGPoint?, in frame: CGRect) -> CGPoint? {
+        guard let point else { return nil }
         return CGPoint(x: point.x - frame.minX, y: point.y - frame.minY)
+    }
+}
+
+private struct PrecisionCueStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.caption.weight(.bold))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.72), in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.18)))
     }
 }
 
