@@ -107,7 +107,7 @@ final class PlaybackEngine {
 
     /// Start a prepared item at an exact audio host time. This is the bridge
     /// that makes the video, count-off, and live guide share one clock.
-    func playPrepared(at itemTime: Double, hostTime: UInt64) {
+    func playPrepared(at itemTime: Double, rate scheduledRate: Double, hostTime: UInt64) {
         let nowTicks = mach_absolute_time()
         let secondsFromNow = hostTime > nowTicks
             ? AVAudioTime.seconds(forHostTime: hostTime - nowTicks)
@@ -116,6 +116,7 @@ final class PlaybackEngine {
         let scheduledHostTime = CMClockGetTime(hostClock)
             + CMTime(seconds: secondsFromNow, preferredTimescale: 1_000_000_000)
         let mediaTime = CMTime(seconds: itemTime, preferredTimescale: 600)
+        rate = min(max(scheduledRate, 0.25), 1.0)
         player.setRate(Float(rate), time: mediaTime, atHostTime: scheduledHostTime)
         currentTime = itemTime
         isPlaying = true

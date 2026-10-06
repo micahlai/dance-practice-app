@@ -136,7 +136,10 @@ final class AppState {
         }
 
         let sequence = Self.countOffSequence(target: grid.count(at: startTime))
-        let interval = grid.beatInterval / playback.rate
+        // Freeze the rate for the whole handoff. Both media travel and wall
+        // clock spacing are derived from this same snapshot.
+        let countInRate = playback.rate
+        let interval = grid.beatInterval / countInRate
         // Media time where a music count-in would begin. Falls back to
         // ticks-only when there isn't enough music before the playhead.
         let leadTime = startTime - Double(sequence.count) * grid.beatInterval
@@ -158,7 +161,7 @@ final class AppState {
             }
 
             let landingCount = self.beatClickMode == .off ? nil : grid.count(at: startTime)
-            guard let audioOrigin = self.countOffPlayer.scheduleCountOff(
+            guard let schedule = self.countOffPlayer.scheduleCountOff(
                 counts: sequence,
                 interval: interval,
                 landingCount: landingCount
@@ -169,17 +172,22 @@ final class AppState {
                 return
             }
 
-            let videoStartHostTime = musicCountIn
-                ? audioOrigin
-                : audioOrigin + AVAudioTime.hostTime(
-                    forSeconds: interval * Double(sequence.count)
-                )
-            self.playback.playPrepared(at: preparedStartTime, hostTime: videoStartHostTime)
+            let mediaTravel = startTime - preparedStartTime
+            let wallTravel = mediaTravel / countInRate
+            let videoStartHostTime = schedule.landingHostTime
+                - AVAudioTime.hostTime(forSeconds: wallTravel)
+            self.playback.playPrepared(
+                at: preparedStartTime,
+                rate: countInRate,
+                hostTime: videoStartHostTime
+            )
 
             // Visual counts use the same absolute origin as the audio. They
             // may render a frame late, but can never move the audio clock.
             let clock = ContinuousClock()
-            let visualOrigin = clock.now + .seconds(CountOffPlayer.seconds(until: audioOrigin))
+            let visualOrigin = clock.now + .seconds(
+                CountOffPlayer.seconds(until: schedule.firstCountHostTime)
+            )
             for (i, count) in sequence.enumerated() {
                 guard !Task.isCancelled else { return }
                 try? await clock.sleep(

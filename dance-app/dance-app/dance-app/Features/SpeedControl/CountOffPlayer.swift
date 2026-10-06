@@ -7,6 +7,11 @@ import Darwin
 final class CountOffPlayer {
     static let schedulingLeadTime = 0.12
 
+    struct CountOffSchedule {
+        let firstCountHostTime: UInt64
+        let landingHostTime: UInt64
+    }
+
     private let engine = AVAudioEngine()
     private let node = AVAudioPlayerNode()
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
@@ -16,28 +21,39 @@ final class CountOffPlayer {
         engine.connect(node, to: engine.mainMixerNode, format: format)
     }
 
-    /// Schedule the count-off and, when requested, the live guide's landing
-    /// beat on one clock. Returns the host time of the first count.
+    /// Schedule every count backward from one authoritative landing time.
+    /// Both playback and the visual count use the returned clock anchors.
     func scheduleCountOff(
         counts: [Int],
         interval: Double,
         landingCount: Int?
-    ) -> UInt64? {
+    ) -> CountOffSchedule? {
         guard !counts.isEmpty, interval > 0.05, startEngineIfNeeded() else { return nil }
         node.stop()
-        let origin = mach_absolute_time()
+        let firstCountHostTime = mach_absolute_time()
             + AVAudioTime.hostTime(forSeconds: Self.schedulingLeadTime)
+        let landingHostTime = firstCountHostTime
+            + AVAudioTime.hostTime(forSeconds: interval * Double(counts.count))
 
         for (index, count) in counts.enumerated() {
             if let buffer = makeClick(accent: count == 1 || count == 5) {
-                schedule(buffer, at: hostTime(origin: origin, interval: interval, index: index))
+                let beatsBeforeLanding = counts.count - index
+                schedule(
+                    buffer,
+                    at: landingHostTime - AVAudioTime.hostTime(
+                        forSeconds: interval * Double(beatsBeforeLanding)
+                    )
+                )
             }
         }
         if let landingCount, let buffer = makeClick(accent: landingCount == 1 || landingCount == 5) {
-            schedule(buffer, at: hostTime(origin: origin, interval: interval, index: counts.count))
+            schedule(buffer, at: landingHostTime)
         }
         node.play()
-        return origin
+        return CountOffSchedule(
+            firstCountHostTime: firstCountHostTime,
+            landingHostTime: landingHostTime
+        )
     }
 
     func stop() {
@@ -81,10 +97,6 @@ final class CountOffPlayer {
 
     private func schedule(_ buffer: AVAudioPCMBuffer, at hostTime: UInt64) {
         node.scheduleBuffer(buffer, at: AVAudioTime(hostTime: hostTime), options: [])
-    }
-
-    private func hostTime(origin: UInt64, interval: Double, index: Int) -> UInt64 {
-        origin + AVAudioTime.hostTime(forSeconds: interval * Double(index))
     }
 
     private func makeClick(
