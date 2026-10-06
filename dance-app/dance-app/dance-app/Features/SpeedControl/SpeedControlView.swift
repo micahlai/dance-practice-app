@@ -117,9 +117,10 @@ struct SpeedGestureCatcher: UIViewRepresentable {
     private func connect(_ view: SpeedGestureUIView) {
         let app = self.app
         view.currentRate = { app.playback.rate }
-        view.onBegin = {
+        view.onBegin = { point in
             app.speedGestureActive = true
             app.speedGestureIncrementPercent = 1
+            app.speedGestureStartPoint = point
         }
         view.onChange = { app.setPlaybackRate($0) }
         view.onIncrementChange = { app.speedGestureIncrementPercent = $0 }
@@ -128,6 +129,7 @@ struct SpeedGestureCatcher: UIViewRepresentable {
             app.speedGestureActive = false
             app.speedGestureIncrementPercent = 1
             app.speedGesturePoint = nil
+            app.speedGestureStartPoint = nil
             app.saveState()
         }
     }
@@ -135,7 +137,7 @@ struct SpeedGestureCatcher: UIViewRepresentable {
 
 final class SpeedGestureUIView: UIView {
     var currentRate: (() -> Double)?
-    var onBegin: (() -> Void)?
+    var onBegin: ((CGPoint) -> Void)?
     var onChange: ((Double) -> Void)?
     var onIncrementChange: ((Int) -> Void)?
     /// Finger location in window coordinates, for positioning the HUD.
@@ -181,7 +183,7 @@ final class SpeedGestureUIView: UIView {
             lastSnapped = anchorRate
             zone = .fine
             haptics.prepare()
-            onBegin?()
+            onBegin?(convert(location, to: nil))
             onIncrementChange?(1)
             onMove?(convert(location, to: nil))
         case .changed:
