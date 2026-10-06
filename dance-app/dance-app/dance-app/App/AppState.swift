@@ -205,9 +205,21 @@ final class AppState {
             self.countOffLabel = nil
             self.countOffTask = nil
             self.countInTargetTime = nil
-            self.scheduledGuideTickIndex = nil
+            // The landing click was already queued with the count-off. Seed
+            // the guide scheduler at that exact tick so a slightly lagging
+            // first AVPlayer update cannot queue the landing click again.
+            if self.beatClickMode != .off {
+                let guideInterval = self.beatClickMode == .beatsAndHalf
+                    ? grid.beatInterval / 2
+                    : grid.beatInterval
+                self.scheduledGuideTickIndex = Int(
+                    ((startTime - grid.firstBeatTime) / guideInterval).rounded()
+                )
+            } else {
+                self.scheduledGuideTickIndex = nil
+            }
             self.scheduledGuideMode = self.beatClickMode
-            self.scheduledGuideRate = self.playback.rate
+            self.scheduledGuideRate = countInRate
         }
     }
 
