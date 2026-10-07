@@ -151,7 +151,7 @@ final class WheelView: UIView {
     }
 
     @objc private func handleLongPress(_ gr: UILongPressGestureRecognizer) {
-        guard gr.state == .began else { return }
+        guard gr.state == .began, onLongPress != nil else { return }
         markerHaptics.impactOccurred()
         onLongPress?()
     }
@@ -185,6 +185,9 @@ final class WheelView: UIView {
         }
         setNeedsDisplay()
     }
+
+    /// Stop dragging/coasting before an external control commits or seeks.
+    func stopScrubbing() { finishScrub() }
 
     private func finishScrub() {
         guard mode != .follow else { return }

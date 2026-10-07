@@ -11,6 +11,8 @@ final class TakeRecorder {
     var settings = TakeSettings()
     private(set) var phase: Phase = .preparing
     private(set) var cameraReady = false
+    /// Refresh orientation after input replacement without recreating views.
+    private(set) var cameraRevision = 0
     private(set) var elapsed: Double = 0
     private(set) var countLabel: String?
     private(set) var pendingURL: URL?
@@ -87,7 +89,10 @@ final class TakeRecorder {
 
     func flipCamera() async {
         guard !isActive else { return }
-        do { try await camera.flip() } catch { errorMessage = error.localizedDescription }
+        do {
+            try await camera.flip()
+            cameraRevision += 1
+        } catch { errorMessage = error.localizedDescription }
     }
 
     func start(orientation: UIInterfaceOrientation) {

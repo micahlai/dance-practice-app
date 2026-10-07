@@ -42,6 +42,11 @@ final class PlaybackEngine {
         }
     }
 
+    deinit {
+        if let timeObserver { player.removeTimeObserver(timeObserver) }
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+    }
+
     func load(url: URL) {
         let item = AVPlayerItem(url: url)
         // Preserves pitch at practice speeds (M4 speed control).

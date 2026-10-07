@@ -332,6 +332,30 @@ share-sheet extension, and the actual TestFlight/App Store submission.
 
 ## Session log
 
+### 2026-10-07 — Persistent previews and recording timing popup
+
+- Recording orientation changes use AnyLayout with a stable preview subtree;
+  camera/reference UIKit surfaces survive camera-only/side-by-side/PiP
+  changes. Layout only changes frames; player attachment is identity-guarded.
+- Preview rotation is deduplicated by connection/orientation and applied on
+  the capture queue, not synchronously on every main-thread layout update.
+  Camera flips refresh connection orientation without rebuilding surfaces.
+- Practice portrait/landscape now retains the same video, interpolation, and
+  wheel subtree, preserving player attachment/zoom and avoiding remounts.
+- Music start/count-in landing open a Done/Cancel sheet with a separate
+  reference player at recording speed, the existing inertia/pinch jog wheel,
+  waveform, beat counts, markers, and A/B visualization. Marker editing and
+  loop enforcement are intentionally absent; practice playhead is untouched.
+  Buttons provide non-drag adjustment; count-in clamps to valid in-range beats.
+- Playback engines remove their observers on release; popup dismissal/background
+  stops preview playback and inertia. Tests cover timing-selection boundaries
+  and a sweep of non-beat music starts/offset grids, plus existing exports.
+- Verified: simulator build and standalone timing/draft/export/pixel/audio
+  checks pass. Existing macOS AVFoundation deprecation warnings remain in
+  the export harness. Simulator UI automation was unavailable; actual iPad
+  rotation/layout responsiveness, popup gestures, Dynamic Type, and camera
+  flips still need hands-on verification. No measured frame-time claim.
+
 ### 2026-10-07 — Recording lifecycle and draft verification
 
 - Camera shutdown now waits for the final recording callback before stopping

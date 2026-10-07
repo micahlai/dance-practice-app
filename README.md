@@ -86,6 +86,14 @@ countdown begins. If the countdown needs to start before the selected music,
 the recorder adds a lead-in. Count-in and metronome require a beat grid; set
 it in practice first.
 
+Tap **Choose** beside either time to open the timing popup. Preview the
+reference at your recording speed, jog the existing wheel, and pinch to zoom
+its waveform and beat grid. Saved markers and A/B bounds are visual guides
+only: this popup does not edit them, loop playback, or move the practice
+playhead. Use the beat/0.1-second buttons for precise adjustments, then
+**Done** to apply or **Cancel** to leave the setting unchanged. Count-in
+landings snap to a beat at/after music start and before the video ends.
+
 For example, a 20-second camera take recorded at 50% becomes 10 seconds when
 **Adjust final video to 100%** is enabled. With the option off, it stays
 20 seconds and keeps the slower, pitch-preserved music.

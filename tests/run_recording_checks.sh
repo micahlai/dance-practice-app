@@ -21,6 +21,7 @@ xcrun swiftc -parse-as-library -swift-version 5 \
   "$source_root/Core/Media/DocumentStore.swift" \
   "$source_root/Features/Markers/Marker.swift" \
   "$source_root/Features/Recording/TakeDraft.swift" \
+  "$source_root/Features/Recording/RecordingTimingSelection.swift" \
   "$source_root/Features/Recording/TakeExporter.swift" \
   "$project_root/tests/RecordingChecks.swift" \
   -o "$fixture_root/recording-checks"

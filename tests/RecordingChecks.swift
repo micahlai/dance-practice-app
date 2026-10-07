@@ -12,6 +12,36 @@ enum MediaImporter {
     @MainActor static func main() async throws {
         let fixtureDirectory = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
         let grid = BeatGrid(firstBeatTime: 0, bpm: 120)
+        let music = RecordingTimingTarget.musicStart
+        let landing = RecordingTimingTarget.countIn
+        assert(music.selection(at: -1, musicStart: 0, duration: 8, grid: nil) == 0)
+        assert(music.selection(at: 10, musicStart: 0, duration: 8, grid: nil) == 7.9)
+        assert(music.selection(at: 1.23, musicStart: 0, duration: 8, grid: grid) == 1.23)
+        assert(music.selection(at: .nan, musicStart: 0, duration: 8, grid: grid) == nil)
+        assert(music.selection(at: 0, musicStart: 0, duration: 0, grid: grid) == nil)
+        assert(landing.selection(at: 1.23, musicStart: 0, duration: 8, grid: grid) == 1)
+        assert(landing.selection(at: 0, musicStart: 1.1, duration: 8, grid: grid) == 1.5)
+        assert(landing.selection(at: 8, musicStart: 0, duration: 8, grid: grid) == 7.5)
+        assert(landing.selection(at: 8, musicStart: 7.6, duration: 8, grid: grid) == nil)
+        assert(landing.selection(at: 1, musicStart: 0, duration: 8, grid: nil) == nil)
+        assert(landing.selection(at: 1, musicStart: 0, duration: 8,
+            grid: BeatGrid(firstBeatTime: 0, bpm: 0)) == nil)
+        let offsetGrid = BeatGrid(firstBeatTime: 0.2, bpm: 120)
+        assert(landing.selection(at: 0, musicStart: 0, duration: 8, grid: offsetGrid) == 0.2)
+        // Exhaust a range of non-beat bounds and selected times, including
+        // negative beat origins; every committed landing remains a beat.
+        for firstBeat in [-1.25, 0, 0.2, 2.25] {
+            let shifted = BeatGrid(firstBeatTime: firstBeat, bpm: 120)
+            for start in stride(from: 0.0, to: 8, by: 0.13) {
+                for time in stride(from: -1.0, through: 9, by: 0.17) {
+                    if let chosen = landing.selection(at: time, musicStart: start, duration: 8, grid: shifted) {
+                        assert(chosen >= start && chosen < 8)
+                        assert(abs(shifted.nearestBeatTime(to: chosen) - chosen) < 0.000001)
+                    }
+                }
+            }
+        }
+        print("PASS: timing picker clamps music, snaps landing to valid beats, and rejects impossible selections")
         for rate in [0.25, 0.5, 0.75, 1.0] {
             for landingCount in 1...8 {
                 var settings = TakeSettings()

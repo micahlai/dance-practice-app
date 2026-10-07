@@ -22,7 +22,7 @@ struct ZoomableVideoView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ZoomScrollView, context: Context) {
-        uiView.videoView.playerLayer.player = player
+        if uiView.videoView.playerLayer.player !== player { uiView.videoView.playerLayer.player = player }
         uiView.interpolationView.attach(to: player)
         uiView.interpolationView.isActive = interpolationActive
         uiView.onCenterTap = onCenterTap

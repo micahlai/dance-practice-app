@@ -121,6 +121,23 @@ nonisolated final class TakeCamera: NSObject, AVCaptureFileOutputRecordingDelega
         }
     }
 
+    /// Keep capture-connection mutations on the session queue, not in a
+    /// main-thread layout pass. Resizing a preview does not need a rotation.
+    func rotatePreview(_ connection: AVCaptureConnection, to angle: CGFloat) {
+        let request = PreviewRotation(connection: connection, angle: angle)
+        queue.async {
+            guard request.connection.videoRotationAngle != request.angle,
+                request.connection.isVideoRotationAngleSupported(request.angle) else { return }
+            request.connection.videoRotationAngle = request.angle
+        }
+    }
+
+    // The connection is passed across once; mutation is serialized on queue.
+    private struct PreviewRotation: @unchecked Sendable {
+        let connection: AVCaptureConnection
+        let angle: CGFloat
+    }
+
     func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL,
                     from connections: [AVCaptureConnection]) {
         let origin = mach_absolute_time()
@@ -159,26 +176,31 @@ enum CameraError: LocalizedError {
 }
 
 struct TakeCameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
+    let camera: TakeCamera
 
     func makeUIView(context: Context) -> Preview {
         let view = Preview()
-        view.preview.session = session
+        view.camera = camera
+        view.preview.session = camera.session
         view.preview.videoGravity = .resizeAspect
         return view
     }
     func updateUIView(_ view: Preview, context: Context) { view.setOrientation() }
 
     final class Preview: UIView {
+        weak var camera: TakeCamera?
+        private var lastConnection: AVCaptureConnection?
+        private var lastAngle: CGFloat?
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var preview: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
         override func layoutSubviews() { super.layoutSubviews(); setOrientation() }
-        func setOrientation() {
+        func setOrientation(force: Bool = false) {
             guard let connection = preview.connection else { return }
             let angle = captureRotationAngle(window?.windowScene?.interfaceOrientation ?? .portrait)
-            if connection.isVideoRotationAngleSupported(angle) {
-                connection.videoRotationAngle = angle
-            }
+            guard force || connection !== lastConnection || angle != lastAngle else { return }
+            lastConnection = connection
+            lastAngle = angle
+            camera?.rotatePreview(connection, to: angle)
         }
     }
 }

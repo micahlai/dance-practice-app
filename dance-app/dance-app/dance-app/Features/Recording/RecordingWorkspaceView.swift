@@ -11,6 +11,7 @@ struct RecordingWorkspaceView: View {
     @State private var reviewPlayer: AVPlayer?
     @State private var reviewTask: Task<Void, Never>?
     @State private var reviewURL: URL?
+    @State private var timingTarget: RecordingTimingTarget?
 
     var body: some View {
         NavigationStack {
@@ -108,6 +109,24 @@ struct RecordingWorkspaceView: View {
                 clearReview()
             }
             .interactiveDismissDisabled(recorder.isActive || recorder.phase == .review || recorder.isSaving)
+            .sheet(item: $timingTarget) { target in
+                if let document = app.document {
+                    RecordingTimingPicker(
+                        target: target, videoURL: document.videoURL,
+                        initialTime: target == .musicStart ? recorder.settings.musicStart : recorder.settings.countInTime,
+                        musicStart: recorder.settings.musicStart,
+                        duration: recorder.reference.duration, rate: recorder.settings.rate
+                    ) { time in
+                        if target == .musicStart {
+                            recorder.settings.musicStart = time
+                            recorder.reference.seek(to: time)
+                        } else {
+                            recorder.settings.countInTime = time
+                        }
+                    }
+                    .environment(app)
+                }
+            }
         }
         .preferredColorScheme(.dark)
     }
@@ -119,98 +138,68 @@ struct RecordingWorkspaceView: View {
                 description: Text("Open a video from the home page, then press Recording next to Help."))
         } else {
             GeometryReader { geometry in
-                if geometry.size.width >= 900 {
-                    HStack(spacing: 0) {
-                        VStack(spacing: 16) {
-                            stage
-                            transport
-                        }.padding(24)
-                        settingsPanel.frame(width: 340)
+                let wide = geometry.size.width >= 900
+                let layout = wide ? AnyLayout(HStackLayout(spacing: 16)) : AnyLayout(VStackLayout(spacing: 16))
+                layout {
+                    VStack(spacing: 16) {
+                        stage
+                        transport
                     }
-                } else {
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            stage.frame(height: max(260, geometry.size.height * 0.46))
-                            transport
-                            settingsContents
-                        }
-                        .padding(16)
-                    }
+                    .frame(height: wide ? nil : max(220, geometry.size.height * 0.5))
+                    .frame(maxWidth: .infinity, maxHeight: wide ? .infinity : nil)
+                    settingsPanel.frame(width: wide ? 340 : nil)
+                        .frame(maxWidth: wide ? nil : .infinity, maxHeight: .infinity)
                 }
+                .padding(16)
             }
             .background(Color.black)
         }
     }
 
     private var stage: some View {
-        GeometryReader { geometry in
-            ZStack {
-                Color.black
-                if recorder.phase == .review {
-                    if let reviewPlayer { VideoPlayer(player: reviewPlayer) } else { ProgressView("Preparing take preview…") }
-                } else if recorder.settings.layout == .sideBySide {
-                    HStack(spacing: 8) {
-                        cameraSurface
-                        TakePlayerSurface(player: recorder.reference.player)
-                            .overlay(alignment: .bottomLeading) { stageLabel("Reference") }
-                    }
-                } else {
-                    cameraSurface
-                    if recorder.settings.layout == .pictureInPicture {
-                        TakePlayerSurface(player: recorder.reference.player)
-                            .frame(width: geometry.size.width * 0.28, height: geometry.size.height * 0.28)
-                            .background(.black)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.5)))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                            .padding(16)
-                    }
-                }
-                if let label = recorder.countLabel {
-                    Text(label)
-                        .font(.system(size: 96, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black, radius: 12)
-                        .allowsHitTesting(false)
-                }
-                if recorder.phase == .recording {
-                    Label("REC · \(recorder.elapsed.formatted(.number.precision(.fractionLength(1))))s", systemImage: "record.circle.fill")
-                        .font(.headline.monospacedDigit())
-                        .padding(12)
-                        .background(.black.opacity(0.75), in: Capsule())
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(16)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.18)))
-        }
-    }
-
-    private var cameraSurface: some View {
         ZStack {
-            TakeCameraPreview(session: recorder.camera.session)
-            if !recorder.cameraReady {
-                VStack(spacing: 16) {
-                    Image(systemName: "video.slash").font(.largeTitle)
-                    Text(recorder.phase == .preparing ? "Preparing camera…" : "Camera unavailable")
-                    if recorder.phase == .preparing {
-                        ProgressView()
-                    } else {
-                        Button("Try again") { Task { await recorder.prepareCamera() } }
-                            .buttonStyle(.bordered).controlSize(.large)
-                    }
-                }
-                .padding(24)
-                .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 16))
+            Color.black
+            RecordingPreviewStage(camera: recorder.camera, player: recorder.reference.player,
+                layout: recorder.settings.layout, cameraRevision: recorder.cameraRevision)
+                .opacity(recorder.phase == .review ? 0 : 1)
+            if recorder.phase == .review {
+                if let reviewPlayer { VideoPlayer(player: reviewPlayer) } else { ProgressView("Preparing take preview…") }
+            } else if !recorder.cameraReady {
+                cameraUnavailable
+            }
+            if let label = recorder.countLabel {
+                Text(label)
+                    .font(.system(size: 96, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black, radius: 12)
+                    .allowsHitTesting(false)
+            }
+            if recorder.phase == .recording {
+                Label("REC · \(recorder.elapsed.formatted(.number.precision(.fractionLength(1))))s", systemImage: "record.circle.fill")
+                    .font(.headline.monospacedDigit())
+                    .padding(12)
+                    .background(.black.opacity(0.75), in: Capsule())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(16)
             }
         }
-        .overlay(alignment: .bottomLeading) { stageLabel("You") }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.18)))
     }
 
-    private func stageLabel(_ title: String) -> some View {
-        Text(title).font(.caption.weight(.semibold)).padding(8)
-            .background(.black.opacity(0.7), in: Capsule()).padding(12)
+    private var cameraUnavailable: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "video.slash").font(.largeTitle)
+            Text(recorder.phase == .preparing ? "Preparing camera…" : "Camera unavailable")
+            if recorder.phase == .preparing {
+                ProgressView()
+            } else {
+                Button("Try again") { Task { await recorder.prepareCamera() } }
+                    .buttonStyle(.bordered).controlSize(.large)
+            }
+        }
+        .padding(24)
+        .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 16))
     }
 
     @ViewBuilder private var transport: some View {
@@ -283,8 +272,8 @@ struct RecordingWorkspaceView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    /// Portrait uses the workspace's outer scroll view; landscape gives
-    /// these controls their own bounded rail. Avoid nested vertical scrolls.
+    /// The settings rail scrolls independently in both orientations, keeping
+    /// the same preview subtree alive while AnyLayout rearranges it.
     private var settingsContents: some View {
         @Bindable var recorder = recorder
         return VStack(alignment: .leading, spacing: 24) {
@@ -292,14 +281,14 @@ struct RecordingWorkspaceView: View {
                 Text(app.document?.title ?? "Reference").font(.title3.weight(.semibold))
                 Text("Set up your take before recording.").foregroundStyle(.secondary)
             }
-            timingControl("Music starts at", value: $recorder.settings.musicStart)
+            timingControl(.musicStart, time: recorder.settings.musicStart)
             Toggle("Count-in", isOn: $recorder.settings.countInEnabled)
                 .disabled(app.beats.grid == nil)
             if app.beats.grid == nil {
                 Text("Set the beat grid in practice to enable count-in and metronome.")
                     .font(.subheadline).foregroundStyle(.secondary)
             } else if recorder.settings.countInEnabled {
-                timingControl("Count-in lands at", value: $recorder.settings.countInTime)
+                timingControl(.countIn, time: recorder.settings.countInTime)
                 Text(
                     "Music can start before the counts. The count-in follows the reference video's 1–8 grid and lands on the nearest beat."
                 )
@@ -352,27 +341,22 @@ struct RecordingWorkspaceView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    private func timingControl(_ title: String, value: Binding<Double>) -> some View {
+    private func timingControl(_ target: RecordingTimingTarget, time: Double) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
-            HStack {
-                TextField("Seconds", value: value, format: .number.precision(.fractionLength(2)))
-                    .textFieldStyle(.roundedBorder).keyboardType(.decimalPad)
-                    .accessibilityLabel("\(title), seconds").frame(minHeight: 44)
-                Text("s").foregroundStyle(.secondary)
-                Button("Playhead") { value.wrappedValue = app.playback.currentTime }
-                    .buttonStyle(.bordered).frame(minHeight: 44)
+            Text(target.title).font(.headline)
+            Button {
+                timingTarget = target
+            } label: {
+                HStack {
+                    Text("\(time.formatted(.number.precision(.fractionLength(2)))) s").monospacedDigit()
+                    Spacer()
+                    Label("Choose", systemImage: "dial.low")
+                }
+                .frame(minHeight: 44)
             }
-            Slider(
-                value: Binding(
-                    get: { min(max(value.wrappedValue, 0), max(0.1, recorder.reference.duration)) },
-                    set: { value.wrappedValue = $0 }),
-                in: 0...max(0.1, recorder.reference.duration), step: 0.01
-            )
-            .accessibilityLabel(title)
-            .onChange(of: value.wrappedValue) { _, time in
-                if !recorder.isActive, title == "Music starts at" { recorder.reference.seek(to: time) }
-            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("\(target.title), \(time.formatted(.number.precision(.fractionLength(2)))) seconds. Choose on timeline")
+            .disabled(recorder.reference.duration <= 0)
         }
     }
 
@@ -393,7 +377,9 @@ struct TakePlayerSurface: UIViewRepresentable {
         view.layerPlayer.player = player
         return view
     }
-    func updateUIView(_ view: Surface, context: Context) { view.layerPlayer.player = player }
+    func updateUIView(_ view: Surface, context: Context) {
+        if view.layerPlayer.player !== player { view.layerPlayer.player = player }
+    }
     final class Surface: UIView {
         override class var layerClass: AnyClass { AVPlayerLayer.self }
         var layerPlayer: AVPlayerLayer { layer as! AVPlayerLayer }

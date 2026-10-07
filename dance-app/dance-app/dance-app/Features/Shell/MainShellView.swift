@@ -55,10 +55,10 @@ struct PracticeView: View {
             let portrait = geo.size.height > geo.size.width
             let compactLayout = geo.size.width < 900
 
-            if compactLayout {
-                compactColumn
-            } else {
-                HStack(spacing: 0) {
+            // Keep the video/wheel subtree at the same structural position
+            // when crossing the portrait/landscape breakpoint.
+            HStack(spacing: 0) {
+                if !compactLayout {
                     if markerRailCollapsed {
                         CollapsedMarkerRail {
                             withAnimation(.easeInOut(duration: 0.18)) {
@@ -74,16 +74,15 @@ struct PracticeView: View {
                         }
                         .helpTarget(.markers)
                     }
-                    centerColumn
-                    // The speed panel disappears in portrait; its gesture
-                    // remains available along the video's right edge.
-                    if !portrait {
-                        SpeedRail()
-                            .helpTarget(.speed)
-                    }
                 }
-                .animation(.easeInOut(duration: 0.18), value: markerRailCollapsed)
+                centerColumn(compact: compactLayout)
+                // The gesture remains available when this rail is hidden.
+                if !portrait && !compactLayout {
+                    SpeedRail()
+                        .helpTarget(.speed)
+                }
             }
+            .animation(.easeInOut(duration: 0.18), value: markerRailCollapsed)
         }
         .environment(\.activeHelpTarget, activeHelpTarget)
         .overlayPreferenceValue(HelpTargetPreferenceKey.self) { targets in
@@ -126,48 +125,38 @@ struct PracticeView: View {
 
     /// Video + controls, shared by both layouts. The video area flexes to
     /// fill; the wheel/transport keep fixed heights.
-    private var centerColumn: some View {
-        VStack(spacing: 0) {
-            videoStage
-            jogControls
-        }
-    }
-
-    /// On narrow screens the marker rail is constrained to the stage above
-    /// the jog controls, so it never covers the wheel or transport buttons.
-    private var compactColumn: some View {
-        VStack(spacing: 0) {
-            ZStack(alignment: .leading) {
-                videoSurface
-
-                if compactMarkerPresented {
-                    MarkerRail {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            compactMarkerPresented = false
-                        }
-                    }
-                    .padding(.top, 60)
-                    .helpTarget(.markers)
-                    .transition(.move(edge: .leading))
-                } else {
-                    CollapsedMarkerRail {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            compactMarkerPresented = true
-                        }
-                    }
-                    .padding(.top, 60)
-                    .helpTarget(.markers)
-                }
-            }
-            BeatControlsRow()
-            jogControls
-        }
-    }
-
-    private var videoStage: some View {
+    private func centerColumn(compact: Bool) -> some View {
         VStack(spacing: 0) {
             videoSurface
+                .overlay(alignment: .leading) {
+                    if compact {
+                        compactMarkers
+                    }
+                }
             BeatControlsRow()
+            jogControls
+        }
+    }
+
+    /// Narrow-screen markers overlay only the video, never the transport.
+    @ViewBuilder private var compactMarkers: some View {
+        if compactMarkerPresented {
+            MarkerRail {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    compactMarkerPresented = false
+                }
+            }
+            .padding(.top, 60)
+            .helpTarget(.markers)
+            .transition(.move(edge: .leading))
+        } else {
+            CollapsedMarkerRail {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    compactMarkerPresented = true
+                }
+            }
+            .padding(.top, 60)
+            .helpTarget(.markers)
         }
     }
 
