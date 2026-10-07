@@ -332,6 +332,15 @@ share-sheet extension, and the actual TestFlight/App Store submission.
 
 ## Session log
 
+### 2026-10-07 — Root README
+
+- Added `README.md` with project setup, practice controls, recording and
+  count-in/speed behavior, draft sharing/storage, architecture, and the
+  repeatable verification command. Written in a separate documentation
+  worktree on `docs/project-readme`; no app code changes in this worktree.
+- README describes the implemented Photos/Files import UI and identifies
+  physical-device and manual checks that remain outstanding.
+
 ### 2026-10-07 — Recording, drafts, and home take library
 
 - Recording button next to Help opens a full-screen Record/Drafts workspace;
