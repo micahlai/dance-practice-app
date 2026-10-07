@@ -122,6 +122,14 @@ final class PlaybackEngine {
         isPlaying = true
     }
 
+    /// Resolve outstanding seek/preroll callbacks when a recording start is
+    /// cancelled, so its suspended preparation task can release resources.
+    func cancelScheduledPreparation() {
+        player.cancelPendingPrerolls()
+        player.currentItem?.cancelPendingSeeks()
+        pause()
+    }
+
     func setRate(_ newRate: Double) {
         rate = min(max(newRate, 0.25), 1.0)
         if isPlaying {

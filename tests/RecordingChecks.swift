@@ -39,6 +39,69 @@ enum MediaImporter {
         assert(TakeTimeline(settings: preRoll, grid: nil).counts.isEmpty)
         print("PASS: independent count-in / music timing across four speeds and all eight landing counts")
 
+        let cameraURL = fixtureDirectory.appendingPathComponent("choreo-camera.mov")
+        let referenceURL = fixtureDirectory.appendingPathComponent("choreo-reference.mp4")
+        let draftRoot = fixtureDirectory.appendingPathComponent("draft-library", isDirectory: true)
+        var savedSettings = TakeSettings()
+        savedSettings.rate = 0.5
+        savedSettings.layout = .sideBySide
+        let document = VideoDocument(id: UUID(), title: "Reference fixture", videoURL: referenceURL, audioURL: nil)
+        let draft = try await TakeDraftStore.save(cameraURL: cameraURL, document: document, settings: savedSettings,
+                                                 grid: grid, musicDelay: 0.5, duration: 4, into: draftRoot)
+        savedSettings.rate = 1
+        let restored = try TakeDraftStore.load(from: draftRoot)
+        assert(restored.count == 1 && restored[0].id == draft.id)
+        assert(restored[0].settings.rate == 0.5 && restored[0].settings.layout == .sideBySide)
+        assert(restored[0].grid == grid && restored[0].musicDelay == 0.5)
+        let savedFolder = draftRoot.appendingPathComponent(draft.id.uuidString)
+        let savedFiles = try FileManager.default.contentsOfDirectory(at: savedFolder, includingPropertiesForKeys: nil)
+        let expectedSize = try savedFiles.reduce(Int64(0)) { total, url in total + Int64(try Data(contentsOf: url).count) }
+        assert(TakeDraftStore.storageBytes(for: draft, in: draftRoot) == expectedSize)
+        let cameraMatches = try Data(contentsOf: savedFolder.appendingPathComponent(draft.cameraFileName)) == Data(contentsOf: cameraURL)
+        let referenceMatches = try Data(contentsOf: savedFolder.appendingPathComponent(draft.referenceFileName)) == Data(contentsOf: referenceURL)
+        assert(cameraMatches && referenceMatches)
+        print("PASS: draft sources and capture settings survive save/reload; storage includes every saved byte")
+
+        let beforeFailure = try FileManager.default.contentsOfDirectory(atPath: draftRoot.path)
+        let missingReference = VideoDocument(id: UUID(), title: "Missing", videoURL: fixtureDirectory.appendingPathComponent("missing.mp4"), audioURL: nil)
+        do {
+            _ = try await TakeDraftStore.save(cameraURL: cameraURL, document: missingReference, settings: savedSettings,
+                                              grid: grid, musicDelay: 0.5, duration: 4, into: draftRoot)
+            assertionFailure("Saving a missing reference must fail")
+        } catch {
+            let afterFailure = try FileManager.default.contentsOfDirectory(atPath: draftRoot.path)
+            assert(Set(afterFailure) == Set(beforeFailure))
+        }
+        let broken = draftRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: broken, withIntermediateDirectories: true)
+        try Data("invalid draft metadata".utf8).write(to: broken.appendingPathComponent("take.json"))
+        let validDrafts = try TakeDraftStore.load(from: draftRoot)
+        assert(validDrafts.count == 1 && validDrafts[0].id == draft.id)
+        try TakeDraftStore.delete(draft, from: draftRoot)
+        let remainingDrafts = try TakeDraftStore.load(from: draftRoot)
+        assert(remainingDrafts.isEmpty && TakeDraftStore.storageBytes(for: draft, in: draftRoot) == 0)
+        assert(FileManager.default.fileExists(atPath: cameraURL.path) && FileManager.default.fileExists(atPath: referenceURL.path))
+        print("PASS: failed save is atomic, invalid drafts are skipped, and deletion preserves source footage")
+
+        let cancelled = Task { @MainActor in
+            try await TakeExporter.render(cameraURL: cameraURL, referenceURL: referenceURL, settings: savedSettings, musicDelay: 0.5)
+        }
+        cancelled.cancel()
+        do {
+            _ = try await cancelled.value
+            assertionFailure("An already-cancelled export must not run")
+        } catch is CancellationError {}
+        let exporting = Task { @MainActor in
+            try await TakeExporter.render(cameraURL: cameraURL, referenceURL: referenceURL, settings: savedSettings, musicDelay: 0.5)
+        }
+        try await Task.sleep(for: .milliseconds(30))
+        exporting.cancel()
+        do {
+            _ = try await exporting.value
+            assertionFailure("A cancelled export must not return a movie")
+        } catch is CancellationError {}
+        print("PASS: cancellation before and during export does not return an unused video")
+
         for layout in ReferenceLayout.allCases {
             for normalize in [false, true] {
                 var settings = TakeSettings()

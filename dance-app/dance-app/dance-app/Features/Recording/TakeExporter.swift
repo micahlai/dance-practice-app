@@ -23,6 +23,7 @@ enum TakeExporter {
     /// Also supports rendering a just-recorded take before it is saved.
     static func render(cameraURL: URL, referenceURL: URL, settings: TakeSettings,
                        musicDelay captureMusicDelay: Double) async throws -> URL {
+        try Task.checkCancellation()
         let cameraAsset = AVURLAsset(url: cameraURL)
         let referenceAsset = AVURLAsset(url: referenceURL)
         guard let cameraSource = try await cameraAsset.loadTracks(withMediaType: .video).first else {
@@ -122,10 +123,14 @@ enum TakeExporter {
         let cancellation = ExportCancellation(session: export)
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
-                export.exportAsynchronously { continuation.resume() }
+                if !cancellation.start(completion: { continuation.resume() }) { continuation.resume() }
             }
         } onCancel: {
             cancellation.cancel()
+        }
+        if Task.isCancelled {
+            try? FileManager.default.removeItem(at: url)
+            throw CancellationError()
         }
         guard export.status == .completed else {
             try? FileManager.default.removeItem(at: url)
@@ -156,6 +161,20 @@ enum TakeExporter {
 /// exposes only that thread-safe operation to the cancellation handler.
 nonisolated private final class ExportCancellation: @unchecked Sendable {
     private let session: AVAssetExportSession
+    private let lock = NSLock()
+    private var cancelled = false
     init(session: AVAssetExportSession) { self.session = session }
-    func cancel() { session.cancelExport() }
+    func start(completion: @escaping @Sendable () -> Void) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !cancelled else { return false }
+        session.exportAsynchronously(completionHandler: completion)
+        return true
+    }
+    func cancel() {
+        lock.lock()
+        defer { lock.unlock() }
+        cancelled = true
+        session.cancelExport()
+    }
 }

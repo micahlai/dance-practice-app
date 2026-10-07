@@ -139,6 +139,9 @@ checks:
   correction enabled and disabled.
 - Export duration, one clean audio track, and a take stopped before music starts.
 - Rendered reference placement, visibility before music starts, and audio pitch.
+- Draft save/reload, capture settings and source copies, storage accounting,
+  failed-save rollback, and deletion that preserves the source videos.
+- Cancellation before and during export.
 
 The checks use temporary files and do not open the app's video library.
 Generated videos are left in the temporary directory printed by the script

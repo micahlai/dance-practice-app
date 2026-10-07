@@ -26,6 +26,25 @@ final class TakeRecorder {
     @ObservationIgnored private var startedSettings = TakeSettings()
     @ObservationIgnored private var startedGrid: BeatGrid?
     @ObservationIgnored private var stopRequested = false
+    @ObservationIgnored private var cameraActivation: UUID?
+    @ObservationIgnored private var sessionObservers: [NSObjectProtocol] = []
+    @ObservationIgnored private var preparationID: UUID?
+    @ObservationIgnored private var captureRequested = false
+
+    init() {
+        let center = NotificationCenter.default
+        sessionObservers = [AVCaptureSession.wasInterruptedNotification, AVCaptureSession.runtimeErrorNotification].map { name in
+            center.addObserver(forName: name, object: camera.session, queue: .main) { [weak self] notification in
+                let message = (notification.userInfo?[AVCaptureSessionErrorKey] as? NSError)?.localizedDescription
+                    ?? "Camera recording was interrupted. Any playable footage can still be saved as a draft."
+                MainActor.assumeIsolated { self?.handleCameraInterruption(message: message) }
+            }
+        }
+    }
+
+    deinit {
+        for observer in sessionObservers { NotificationCenter.default.removeObserver(observer) }
+    }
 
     var isActive: Bool { phase == .starting || phase == .recording || phase == .finishing }
 
@@ -41,14 +60,29 @@ final class TakeRecorder {
     }
 
     func prepareCamera() async {
+        let activation = UUID()
+        cameraActivation = activation
         do {
             try await camera.prepare()
+            guard cameraActivation == activation, !Task.isCancelled else {
+                if cameraActivation == nil || (cameraActivation == activation && Task.isCancelled) { camera.stopSession() }
+                return
+            }
             cameraReady = true
+        } catch is CancellationError {
+            if cameraActivation == activation { cameraReady = false; camera.stopSession() }
+            return
         } catch {
+            guard cameraActivation == activation else { return }
             cameraReady = false
             errorMessage = error.localizedDescription
         }
         if phase == .preparing { phase = .ready }
+    }
+
+    private func handleCameraInterruption(message: String) {
+        errorMessage = message
+        suspend()
     }
 
     func flipCamera() async {
@@ -74,6 +108,9 @@ final class TakeRecorder {
         startedSettings = settings
         startedGrid = grid
         phase = .starting
+        let preparation = UUID()
+        preparationID = preparation
+        captureRequested = false
         stopRequested = false
         elapsed = 0
         countLabel = nil
@@ -83,13 +120,16 @@ final class TakeRecorder {
         tickTask = Task { [weak self] in
             guard let self else { return }
             let prepared = await self.reference.prepareForScheduledStart(at: self.settings.musicStart)
-            guard !Task.isCancelled, !self.stopRequested else { self.phase = .ready; return }
+            // An old preparation may complete after Cancel start and a new
+            // take. It must never reset or launch that new take's camera.
+            guard self.preparationID == preparation, !Task.isCancelled, !self.stopRequested else { return }
             guard prepared else {
                 self.errorMessage = "Couldn't prepare the reference video. Try again."
                 self.phase = .ready
                 return
             }
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("capture-\(UUID().uuidString).mov")
+            self.captureRequested = true
             self.camera.record(to: url, rotationAngle: captureRotationAngle(orientation)) { [weak self] hostTime in
                 self?.captureStarted(at: hostTime, timeline: timeline)
             } onFinish: { [weak self] url, error in
@@ -99,7 +139,7 @@ final class TakeRecorder {
     }
 
     private func captureStarted(at hostTime: UInt64, timeline: TakeTimeline) {
-        guard !stopRequested else { camera.stopRecording(); return }
+        guard phase == .starting, !stopRequested else { camera.stopRecording(); return }
         phase = .recording
         origin = hostTime
         UIApplication.shared.isIdleTimerDisabled = true
@@ -167,30 +207,34 @@ final class TakeRecorder {
 
     func stop() {
         guard phase == .starting || phase == .recording else { return }
+        let preparingReference = phase == .starting && !captureRequested
         stopRequested = true
         tickTask?.cancel()
         reference.pause()
         guide.stop()
         countLabel = nil
         UIApplication.shared.isIdleTimerDisabled = false
-        // The camera remembers stop requests until didStart arrives.
-        camera.stopRecording()
-        phase = .finishing
+        if preparingReference {
+            preparationID = nil
+            reference.cancelScheduledPreparation()
+            phase = .ready
+        } else {
+            // The camera remembers stop requests until didStart arrives.
+            camera.stopRecording()
+            phase = .finishing
+        }
     }
 
-    private func captureFinished(url: URL, error: String?) {
+    private func captureFinished(url: URL, error message: String?) {
         tickTask?.cancel()
         reference.pause()
         guide.stop()
         origin = nil
+        captureRequested = false
+        preparationID = nil
         countLabel = nil
         UIApplication.shared.isIdleTimerDisabled = false
-        if let error {
-            errorMessage = error
-            // Preserve any partially finalized file for diagnostic recovery.
-            phase = .ready
-            return
-        }
+        phase = .finishing
         Task {
             do {
                 let duration = try await AVURLAsset(url: url).load(.duration).seconds
@@ -198,8 +242,9 @@ final class TakeRecorder {
                 pendingURL = url
                 pendingDuration = duration
                 phase = .review
+                if let message { errorMessage = "Recording ended early. Your playable take is available to review and save. \(message)" }
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = message ?? error.localizedDescription
                 phase = .ready
             }
         }
@@ -236,6 +281,9 @@ final class TakeRecorder {
     }
 
     func suspend() {
+        cameraActivation = nil
+        cameraReady = false
+        if phase == .preparing { phase = .ready }
         if phase == .starting || phase == .recording { stop() }
         reference.pause()
         guide.stop()

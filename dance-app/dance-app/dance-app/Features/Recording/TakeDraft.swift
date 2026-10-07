@@ -53,14 +53,24 @@ nonisolated enum TakeDraftStore {
         return result
     }
 
-    static func load() throws -> [TakeDraft] {
-        let root = try directory()
+    /// An explicit root permits isolated verification without touching the
+    /// app's library. Production callers use Application Support/Takes.
+    static func load(from rootDirectory: URL? = nil) throws -> [TakeDraft] {
+        let root = try rootDirectory ?? directory()
         return try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
             .compactMap { folder -> TakeDraft? in
                 guard let data = try? Data(contentsOf: folder.appendingPathComponent("take.json")),
                       let draft = try? JSONDecoder().decode(TakeDraft.self, from: data),
                       folder.lastPathComponent == draft.id.uuidString,
-                      let camera = try? draft.cameraURL, let reference = try? draft.referenceURL,
+                      draft.settings.rate.isFinite, (0.25...1).contains(draft.settings.rate),
+                      draft.duration.isFinite, draft.duration > 0,
+                      draft.musicDelay.isFinite, draft.musicDelay >= 0,
+                      draft.settings.musicStart.isFinite, draft.settings.musicStart >= 0,
+                      draft.settings.countInTime.isFinite,
+                      isFileName(draft.cameraFileName), isFileName(draft.referenceFileName) else { return nil }
+                let camera = folder.appendingPathComponent(draft.cameraFileName)
+                let reference = folder.appendingPathComponent(draft.referenceFileName)
+                guard
                       FileManager.default.fileExists(atPath: camera.path),
                       FileManager.default.fileExists(atPath: reference.path) else { return nil }
                 return draft
@@ -69,9 +79,11 @@ nonisolated enum TakeDraftStore {
     }
 
     @concurrent static func save(cameraURL: URL, document: VideoDocument, settings: TakeSettings,
-                                 grid: BeatGrid?, musicDelay: Double, duration: Double) async throws -> TakeDraft {
+                                 grid: BeatGrid?, musicDelay: Double, duration: Double,
+                                 into rootDirectory: URL? = nil) async throws -> TakeDraft {
         let id = UUID()
-        let root = try directory()
+        let root = try rootDirectory ?? directory()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let staging = root.appendingPathComponent("pending-\(id.uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
         do {
@@ -91,16 +103,23 @@ nonisolated enum TakeDraftStore {
         }
     }
 
-    static func delete(_ draft: TakeDraft) throws {
-        try FileManager.default.removeItem(at: draft.directory)
+    static func delete(_ draft: TakeDraft, from rootDirectory: URL? = nil) throws {
+        let root = try rootDirectory ?? directory()
+        try FileManager.default.removeItem(at: root.appendingPathComponent(draft.id.uuidString))
     }
 
-    static func storageBytes(for draft: TakeDraft) -> Int64 {
-        guard let folder = try? draft.directory,
+    static func storageBytes(for draft: TakeDraft, in rootDirectory: URL? = nil) -> Int64 {
+        guard let root = try? rootDirectory ?? directory() else { return 0 }
+        let folder = root.appendingPathComponent(draft.id.uuidString)
+        guard
               let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         return files.reduce(0) { total, url in
             total + Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
         }
+    }
+
+    private static func isFileName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains("\\")
     }
 }
 

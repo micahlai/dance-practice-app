@@ -332,6 +332,26 @@ share-sheet extension, and the actual TestFlight/App Store submission.
 
 ## Session log
 
+### 2026-10-07 — Recording lifecycle and draft verification
+
+- Camera shutdown now waits for the final recording callback before stopping
+  the capture session. Suspension invalidates pending activation so a late
+  permission/prepare result cannot restart an abandoned recorder.
+- Camera interruption/runtime errors stop reference playback and guides.
+  Playable footage from an early finish remains reviewable and saveable;
+  late start callbacks cannot restart playback after a take has stopped.
+- Cancel start immediately restores ready state while the reference is
+  preparing. Outstanding seeks/prerolls are cancelled, and a preparation ID
+  prevents an old callback from starting or resetting a later take.
+- Export start/cancellation are serialized, including cancellation before
+  encoding starts. Completed-but-cancelled output is removed.
+- Draft-store verification now uses an isolated directory and covers source
+  copies, immutable settings, save/reload, byte totals, failed-save rollback,
+  malformed entries, and deletion without removing source footage. Existing
+  count-in, layout, duration, pixel, and pitch checks also pass.
+- Generic iOS Simulator build passes. Actual camera/audio timing, OS
+  interruptions, and share-sheet interactions still need a physical iPad.
+
 ### 2026-10-07 — Root README
 
 - Added `README.md` with project setup, practice controls, recording and

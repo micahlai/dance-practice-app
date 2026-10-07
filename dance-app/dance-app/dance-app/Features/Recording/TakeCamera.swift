@@ -13,6 +13,7 @@ nonisolated final class TakeCamera: NSObject, AVCaptureFileOutputRecordingDelega
     private var configured = false
     private var pendingStop = false
     private var recordingRequested = false
+    private var stopAfterRecording = false
     private var startCallback: (@MainActor @Sendable (UInt64) -> Void)?
     private var finishCallback: (@MainActor @Sendable (URL, String?) -> Void)?
 
@@ -24,11 +25,14 @@ nonisolated final class TakeCamera: NSObject, AVCaptureFileOutputRecordingDelega
         default: allowed = false
         }
         guard allowed else { throw CameraError.permission }
+        try Task.checkCancellation()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
                 do {
                     if !self.configured { try self.configure(position: .front) }
+                    self.stopAfterRecording = false
                     if !self.session.isRunning { self.session.startRunning() }
+                    guard self.session.isRunning, !self.session.isInterrupted else { throw CameraError.unavailable }
                     continuation.resume()
                 } catch { continuation.resume(throwing: error) }
             }
@@ -76,6 +80,10 @@ nonisolated final class TakeCamera: NSObject, AVCaptureFileOutputRecordingDelega
                 onStart: @escaping @MainActor @Sendable (UInt64) -> Void,
                 onFinish: @escaping @MainActor @Sendable (URL, String?) -> Void) {
         queue.async {
+            guard !self.recordingRequested else {
+                Task { @MainActor in onFinish(url, "Another take is still finishing. Try again in a moment.") }
+                return
+            }
             guard self.configured, self.session.isRunning else {
                 Task { @MainActor in onFinish(url, CameraError.unavailable.localizedDescription) }
                 return
@@ -83,6 +91,7 @@ nonisolated final class TakeCamera: NSObject, AVCaptureFileOutputRecordingDelega
             self.startCallback = onStart
             self.finishCallback = onFinish
             self.pendingStop = false
+            self.stopAfterRecording = false
             self.recordingRequested = true
             if let connection = self.output.connection(with: .video) {
                 if connection.isVideoRotationAngleSupported(rotationAngle) { connection.videoRotationAngle = rotationAngle }
@@ -104,6 +113,7 @@ nonisolated final class TakeCamera: NSObject, AVCaptureFileOutputRecordingDelega
 
     func stopSession() {
         queue.async {
+            self.stopAfterRecording = true
             if self.recordingRequested {
                 self.pendingStop = true
                 if self.output.isRecording { self.output.stopRecording() }
@@ -132,6 +142,7 @@ nonisolated final class TakeCamera: NSObject, AVCaptureFileOutputRecordingDelega
             let callback = self.finishCallback
             self.startCallback = nil
             self.finishCallback = nil
+            if self.stopAfterRecording, self.session.isRunning { self.session.stopRunning() }
             Task { @MainActor in callback?(outputFileURL, message) }
         }
     }
