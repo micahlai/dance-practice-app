@@ -31,52 +31,52 @@ struct ImportView: View {
 
     var body: some View {
         ScrollView {
-        VStack(spacing: 28) {
-            VStack(spacing: 8) {
-                Image("ChoreoLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 132, height: 132)
-                    .accessibilityHidden(true)
+            VStack(spacing: 28) {
+                VStack(spacing: 8) {
+                    Image("ChoreoLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 132, height: 132)
+                        .accessibilityHidden(true)
 
-                Text("Choreo Jogger")
-                    .font(.largeTitle.weight(.bold))
+                    Text("Choreo Jogger")
+                        .font(.largeTitle.weight(.bold))
 
-                Text("Load a video to practice")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 16) {
-                PhotosPicker(selection: $photoItem, matching: .videos) {
-                    Label("Photos", systemImage: "photo.on.rectangle")
-                        .frame(minWidth: 120)
+                    Text("Load a video to practice")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
 
-                Button {
-                    showsFileImporter = true
-                } label: {
-                    Label("Files", systemImage: "folder")
-                        .frame(minWidth: 120)
+                HStack(spacing: 16) {
+                    PhotosPicker(selection: $photoItem, matching: .videos) {
+                        Label("Photos", systemImage: "photo.on.rectangle")
+                            .frame(minWidth: 120)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button {
+                        showsFileImporter = true
+                    } label: {
+                        Label("Files", systemImage: "folder")
+                            .frame(minWidth: 120)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .controlSize(.large)
+
+                recentVideosSection
+
+                Button { app.openRecording() } label: {
+                    Label("Recording & drafts", systemImage: "video.badge.plus")
+                        .frame(minHeight: 44)
                 }
                 .buttonStyle(.bordered)
+
+                TakeLibraryView(embedded: true)
+                    .frame(maxWidth: 1000)
             }
-            .controlSize(.large)
-
-            recentVideosSection
-
-            Button { app.openRecording() } label: {
-                Label("Recording & drafts", systemImage: "video.badge.plus")
-                    .frame(minHeight: 44)
-            }
-            .buttonStyle(.bordered)
-
-            TakeLibraryView(embedded: true)
-                .frame(maxWidth: 1000)
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity)
+            .padding(40)
+            .frame(maxWidth: .infinity)
         }
         .disabled(isImporting)
         .overlay {

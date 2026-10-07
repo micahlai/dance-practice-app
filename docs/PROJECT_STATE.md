@@ -364,6 +364,9 @@ share-sheet extension, and the actual TestFlight/App Store submission.
   Simulator UI automation was unavailable in this session.
 - Repeat automated export checks with `bash tests/run_recording_checks.sh`;
   uses Swift/AVFoundation plus locally installed ffmpeg, no app-library data.
+- Follow-up layout pass: portrait recording settings share the outer scroll
+  view, while landscape keeps a separately scrollable settings rail. The
+  repeatable verification script passed, including pixel and pitch checks.
 
 ### 2026-07-07 (sixth session)
 - Frame interpolation option: new
