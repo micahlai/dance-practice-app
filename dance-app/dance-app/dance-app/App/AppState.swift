@@ -10,6 +10,16 @@ final class AppState {
     let playback = PlaybackEngine()
     let beats = BeatsModel()
     let markers = MarkersModel()
+    var showRecording = false
+
+    /// Suspend all practice clocks before the recorder owns playback.
+    func openRecording() {
+        cancelCountOff()
+        clearGuideClickSchedule()
+        playback.pause()
+        scrubAudio.end()
+        showRecording = true
+    }
 
     // Latency calibration (M6). Signed offset (seconds) for the current
     // output route; beat visuals shift by it so they line up with delayed
@@ -237,14 +247,7 @@ final class AppState {
     /// ends one count before `target`, starts on 5 or 1 (whichever gives the
     /// shortest run of at least 3 counts), wrapping through 8 → 1 as needed.
     static func countOffSequence(target: Int) -> [Int] {
-        let end = target == 1 ? 8 : target - 1
-        func length(from start: Int) -> Int { ((end - start + 8) % 8) + 1 }
-        let candidates = [5, 1]
-            .map { (start: $0, length: length(from: $0)) }
-            .filter { $0.length >= 3 }
-        let chosen = candidates.min { $0.length < $1.length }
-            ?? (start: 5, length: length(from: 5))
-        return (0..<chosen.length).map { ((chosen.start - 1 + $0) % 8) + 1 }
+        CountOffSequence.counts(before: target)
     }
 
     private func cancelCountOff() {

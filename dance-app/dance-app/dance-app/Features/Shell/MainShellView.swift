@@ -18,6 +18,12 @@ struct MainShellView: View {
         .task {
             app.restoreLastSession()
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { app.showRecording },
+            set: { app.showRecording = $0 }
+        )) {
+            RecordingWorkspaceView().environment(app)
+        }
     }
 }
 
@@ -199,19 +205,30 @@ struct PracticeView: View {
                 .accessibilityLabel("Return home")
             }
             .overlay(alignment: .topTrailing) {
-                Button {
-                    helpStepIndex = 0
-                    withAnimation { showOnboarding = true }
-                } label: {
-                    Image(systemName: "questionmark")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(.black.opacity(0.58), in: Circle())
-                        .overlay(Circle().strokeBorder(.white.opacity(0.18)))
+                HStack(spacing: 8) {
+                    Button { app.openRecording() } label: {
+                        Image(systemName: "video.badge.plus")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.58), in: Circle())
+                            .overlay(Circle().strokeBorder(.white.opacity(0.18)))
+                    }
+                    .accessibilityLabel("Open recording and drafts")
+                    Button {
+                        helpStepIndex = 0
+                        withAnimation { showOnboarding = true }
+                    } label: {
+                        Image(systemName: "questionmark")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.58), in: Circle())
+                            .overlay(Circle().strokeBorder(.white.opacity(0.18)))
+                    }
+                    .accessibilityLabel("Show control guide")
                 }
                 .padding(16)
-                .accessibilityLabel("Show control guide")
             }
     }
 

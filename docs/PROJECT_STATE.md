@@ -13,7 +13,10 @@ onboarding + privacy manifest all built & verified in sim; the ship items —
 Store Connect). M5 (markers/loops) built, sim-verified. M4 built (haptics +
 gesture feel need hardware). M3 feel-tuned per user feedback. M2 verified by
 user. M1 leftover: share-sheet extension.
-**Last updated:** 2026-07-07
+**New feature:** Recording/takes workspace and home take library implemented;
+build and automated timing/export checks pass. Camera timing and iPad UI
+interaction still require a manual/device pass.
+**Last updated:** 2026-10-07
 
 ## What exists
 
@@ -34,6 +37,10 @@ user. M1 leftover: share-sheet extension.
     zoom + pan, double-tap reset
   - `Features/Import/ImportView.swift` — Photos picker, Files importer,
     paste-a-direct-link (downloads via URLSession)
+  - `Features/Recording/` — camera capture, independent count-in/music
+    timing, speed correction, camera/side-by-side/PiP compositions,
+    persistent drafts, previews, system share sheet, and storage accounting.
+    Home includes every saved take with camera + reference thumbnails.
   - `Features/Shell/MainShellView.swift` — practice layout: marker rail
     (placeholder + eject), video center, speed rail (placeholder),
     transport bar with play/pause + seek slider (stand-in for M3 wheel)
@@ -324,6 +331,39 @@ share-sheet extension, and the actual TestFlight/App Store submission.
   that single owner today — keep it that way.
 
 ## Session log
+
+### 2026-10-07 — Recording, drafts, and home take library
+
+- Recording button next to Help opens a full-screen Record/Drafts workspace;
+  home also opens drafts without needing a loaded reference.
+- Front/back camera with portrait/landscape capture; practice playback and
+  clicks are suspended when entering recording. Camera runs on a serial
+  queue. No microphone capture: final videos use clean reference music.
+- Music start and count-in landing are independently configurable. Shared
+  count sequence and click synthesis preserve the practice 1–8 / & behavior.
+  Pre-roll is added when counts precede the start of available music.
+- Speed is set before capture (25–100%). Optional normalization scales the
+  camera duration by that rate, restoring original music speed. Keeping the
+  recording speed preserves music pitch with AVFoundation's time-domain
+  algorithm. Reference layouts appear in live preview and final exports.
+- Stop → composed preview → save draft or discard. Each draft atomically
+  stores camera footage, its reference copy, and capture-time metadata under
+  Application Support/Takes. Existing drafts survive reference switching.
+  Original sources remain intact on preview/export failure or cancellation.
+- Drafts open a composed preview and export MP4 through Apple's share sheet.
+  Deletion requires confirmation. Home shows every saved draft, original
+  reference preview/title, per-draft storage, and total draft storage.
+- Verified: generic iOS Simulator build passes; standalone checks cover all
+  eight landing counts at four speeds, all three layouts with/without speed
+  correction, and stopping before music starts. Real rendered pixels verify
+  reference placement and pre-roll visibility; spectral checks confirm a
+  440 Hz soundtrack stays 440 Hz in slowed and normalized exports.
+- Manual validation outstanding: iPad portrait/landscape and Dynamic Type
+  UI, actual capture/audio sync (including Bluetooth), interruptions, camera
+  permissions, low-storage behavior, and Photos/Files/AirDrop destinations.
+  Simulator UI automation was unavailable in this session.
+- Repeat automated export checks with `bash tests/run_recording_checks.sh`;
+  uses Swift/AVFoundation plus locally installed ffmpeg, no app-library data.
 
 ### 2026-07-07 (sixth session)
 - Frame interpolation option: new

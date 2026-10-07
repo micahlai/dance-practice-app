@@ -30,6 +30,7 @@ struct ImportView: View {
     @State private var errorMessage: String?
 
     var body: some View {
+        ScrollView {
         VStack(spacing: 28) {
             VStack(spacing: 8) {
                 Image("ChoreoLogo")
@@ -64,8 +65,19 @@ struct ImportView: View {
             .controlSize(.large)
 
             recentVideosSection
+
+            Button { app.openRecording() } label: {
+                Label("Recording & drafts", systemImage: "video.badge.plus")
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+
+            TakeLibraryView(embedded: true)
+                .frame(maxWidth: 1000)
         }
         .padding(40)
+        .frame(maxWidth: .infinity)
+        }
         .disabled(isImporting)
         .overlay {
             if isImporting {

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Audible guide played during normal video playback.
-enum BeatClickMode: Int, Codable, CaseIterable {
+nonisolated enum BeatClickMode: Int, Codable, CaseIterable, Sendable {
     case off
     case beats
     case beatsAndHalf

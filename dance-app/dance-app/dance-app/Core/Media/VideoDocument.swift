@@ -1,7 +1,7 @@
 import Foundation
 
 /// One imported video and its extracted audio track.
-struct VideoDocument: Identifiable, Codable, Hashable {
+nonisolated struct VideoDocument: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     var title: String
     var videoURL: URL
